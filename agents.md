@@ -1,4 +1,4 @@
-# Exa Compliance Agent
+# Compliance Agent
 Make sure you read all the code before answering. Don't guess, check relevant code files before answering.
 
 # Instructions
@@ -11,10 +11,6 @@ Never, ever make commits.
 
 # Project Notes
 conformitas.xyz is a regulatory and compliance search engine for construction companies.
-It is separated into React Front-End (what the user sees)
-Backend starts with TRPC routes -> server/trpc/router/
-Those routes call actual agent -> server/agents/ComplianceAgent
-
 
 # No Database
 
