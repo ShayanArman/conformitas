@@ -1,0 +1,13 @@
+"The email is a notification regarding new app access to a Microsoft account, which is considered a generic communication from a company that doesn't require any action or follow-up from the user, hence it can be trashed."
+
+"This email is a communication from a company that is informing users about updates to their services agreement. Since it doesn't contain personal conversations, travel information, or purchases, it falls under the category of promotional or informational communication, which can be trashed."
+
+'The email is promotional in nature and invites the user to complete their AWS account registration. There are no personal conversations, travel-related content, or purchase information, so it fits the trash category for communications from companies.'
+
+'The email contains important information regarding the creation of an Amazon Web Services account and access to AWS services, which may be needed for future reference.'
+archive
+
+'The email contains a verification code and a security warning. It is not a conversation or a relevant receipt, order, or travel-related email, making it suitable for the trash.'
+trash
+
+'The email is promotional and provides guidance on using OneDrive, which does not fall under important conversations, travel, or purchases.'

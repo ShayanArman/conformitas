@@ -1,0 +1,48 @@
+.panel {
+  border-color: #bfe4da;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(24, 163, 122, 0.12), transparent 30%),
+    linear-gradient(180deg, #f7fffb 0%, #ffffff 100%);
+}
+
+.title {
+  color: #155b48;
+}
+
+.demoSection {
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid #caece2;
+  background: rgba(242, 255, 249, 0.75);
+}
+
+.demoLabel {
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+  color: #1b6654;
+}
+
+.loadingState {
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid #caece2;
+  background: rgba(255, 255, 255, 0.8);
+  align-items: center;
+}
+
+.answerCard {
+  border-color: #caece2;
+  background: #ffffff;
+}
+
+.sectionTitle {
+  font-weight: 700;
+  color: #215f4f;
+}
+
+.citationRow {
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid #ddf1ea;
+  background: #ffffff;
+}

@@ -1,0 +1,40 @@
+1. Make the Email Cleaner show Email Viewer
+
+2. Payments make better.
+
+3. Google Outlook Workflow Manager 
+The issue is that the Cleaner and Sync both rely on Google.
+We have to have a way to 'get' an Object that can interact with Google
+if no current workflows are running.
+
+4. SideBar to include Sync, Workflows, Contacts? (P2) can ship without this.
+
+
+
+// ========================================================
+marketing. marketing. marketing.
+
+
+I'm thinking make the entire application except a few Free. (Emailer/Sales + Transactions/Accounting)
+So add a Free tier.
+Then when they log in, auto look for all running workflows. 
+Run the Email Cleaner workflow.
+Ping the backend for the top 100 workflows.
+If there are NONE running, then run the Email Cleaner.
+Show the currently running workflow in cards.
+
+
+// ======
+BLOG
+/blog 
+update the landing page of the website.
+
+// ======
+delete all emails from DB
+download all emails and make a nice CSV 
+
+// =====
+CSV contacts workflow.
+
+// =====
+make Payment FORCE modal.

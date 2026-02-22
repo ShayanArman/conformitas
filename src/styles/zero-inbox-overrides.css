@@ -1,0 +1,16 @@
+html, body, #__next {
+  height: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+#__next > div {
+  min-height: 100vh;
+}
+
+body {
+  overflow-y: auto;
+}

@@ -1,0 +1,27 @@
+import { publicProcedure, router } from "@server/trpc";
+import { z } from "zod";
+
+export const aiStreamingRouter = router({
+  streamAIResponse: publicProcedure
+    .input(
+      z.object({
+        prompt: z.string().nonempty("Prompt cannot be empty"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const functionName = "GoogleInvokeModelStream-workflows-development";
+      const payload = {
+        input: { prompt: input.prompt },
+        modelId: 'gemini-2.5-flash'
+      };
+
+      const stream = await streamInvokeLambda({ functionName, payload });
+      const chunks: string[] = [];
+
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      return { chunks, done: true };
+    }),
+});

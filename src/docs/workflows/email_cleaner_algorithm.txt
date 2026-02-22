@@ -1,0 +1,20 @@
+
+// ** keep this comment ** for moving emails.
+// ** Important!! ** input is on the baseworkflow. because the child workflow gets restarted and recreated.
+// Here we need the inputs workflowId to be the CleanEmailsWorkflowID.
+// Because that one cannot be 'restarted' without wiping everything.
+// But we can 'restart' the Mover and NOT wipe everything.
+
+
+// in case they use it, come back, and we show them stuff we already moved... If we see an email in a Zero Inbox folder,
+// we simply Create the Processed event with the Message ID
+
+// Imagine we get a Message Page [ M1, M2, M3, M4, ... ];
+// Now for every single Message, We get all the Message that include that sender [ M1, M7, M85, ... ]
+// The only issue is once we get to M7, and we ask the question again, we would reprocess [ M1, M7, M85, ... ]
+// So the only way to truly do this properly, is to ask the DB, have I seen this before?
+// If not, then begin processing.
+// Now eventually make use of Threads pages and not Message pages is because we want to see all the Messages in a Thread
+// To decide if this entire thread is worth Trashing... But I think it might be simpler to not.
+// For example a Thread [ Ma, Mb, Mc, ... Mresponse_to_sender] might show us that this is a legit conversation..
+// Worth keeping.

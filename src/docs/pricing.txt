@@ -1,0 +1,7 @@
+$1 -> 500 L1
+$3 -> 2000 M1
+$5 -> 5000 P1
+$10 -> 12000 PRO
+$20 -> 25000 MAX
+
+Manage 8,000 emails on Zero Inbox with M1 Pack!

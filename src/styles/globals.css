@@ -1,0 +1,32 @@
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  line-height: 1.6;
+  font-size: 18px;
+}
+
+a {
+  color: #0070f3;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+
+/* Forms
+–––––––––––––––––––––––––––––––––––––––––––––––––– */
+
+
+/* Buttons
+–––––––––––––––––––––––––––––––––––––––––––––––––– */
+/* button, input[type="submit"] {
+  color: white;
+} */
+
+button:hover, input[type="submit"]:hover {
+  cursor: pointer;
+}

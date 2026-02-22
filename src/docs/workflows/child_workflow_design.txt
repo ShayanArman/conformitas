@@ -1,0 +1,19 @@
+Answer in one sentence. i need to talk through something. I've got this concept of a Workflow. 
+Each instantiation of a Workflow is kept in the user-workflows table. 
+Now a Workflow can have a child workflow, or many of them. 
+So instead of forcing a schema with Children workflows, 
+we simply have sub-types that inherit all properties of the main Workflow, 
+but have information such as the follow up workflows. 
+Now the issue is that the base workflow CAN encounter an Error. 
+And in that scenario we need to restart it. 
+The issue here is when we want to start the child workflow, we need to ask it specifically if it can start. 
+It can start if it has the resources it needs, 
+AND the root workflow is finished processing. 
+OR the root workflow needs to be restarted. 
+This is very complex you see. 
+Now if the root workflow IS Complete, without error, 
+AND we have the Resources, we should start the Mover Workflow. 
+Now the problem becomes if for some reason it is already started, 
+or ongoing and expired, or error, then we need to restart, 
+and update the root workflow to reference this new workflow. 
+Holy shit right? Answer in one sentence.

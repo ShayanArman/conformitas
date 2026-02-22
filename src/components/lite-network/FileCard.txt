@@ -1,0 +1,89 @@
+import { crispShadow1px, wideShadow2px } from "@helpers/styleHelpers";
+import type { UploadItem } from "types/objects/uploads";
+import type { NextRouter } from "next/router";
+import { AiFillFile } from "react-icons/ai";
+import { Flex, Text } from "@mantine/core";
+import React from "react";
+
+const getFileUrl = ({ uploadItem }: { uploadItem: UploadItem }) => {
+  const fileRoute = `/products/lite-network/file/${encodeURIComponent(btoa(uploadItem.entityId))}/${encodeURIComponent(btoa(uploadItem.uploadSk))}`
+  return fileRoute;
+}
+
+export function MiniFileCard({ uploadItem, router }: { uploadItem: UploadItem; router: NextRouter }) {
+  const fileRoute = getFileUrl({ uploadItem });
+  
+  return (
+    <Flex 
+      direction="column"
+      justify="center"
+      align="center"
+      h="9rem"
+      w="8rem"
+      onClick={() => { router.push(fileRoute) }}
+      sx={{
+        color: "black",
+        padding: "0.5rem",
+        borderRadius: "15px",
+        backgroundColor: "white",
+        cursor: "pointer",
+        transition: "all 0.2s",
+        boxShadow: crispShadow1px,
+        "&:hover": {
+          boxShadow: wideShadow2px,
+          transform: "translateY(-5px)",
+        }
+      }}
+    >
+      <Flex direction="column" justify="center" align="center"
+        sx={{
+          padding: "15px", borderRadius: "50%", border: "1px solid white"
+        }}
+      >
+        <AiFillFile size={32} />
+      </Flex>
+      <Text mt={3} size="lg">
+        { `${uploadItem.fileName.slice(0, 10)}...` }
+      </Text>
+    </Flex>
+  );
+}
+
+export function FileCard({ uploadItem, router }: { uploadItem: UploadItem; router: NextRouter }) {
+  const fileRoute = getFileUrl({ uploadItem });
+  
+  return (
+    <Flex 
+      direction="column"
+      justify="center"
+      align="center"
+      h="9rem"
+      w="8rem"
+      onClick={() => { router.push(fileRoute) }}
+      sx={{
+        color: "black",
+        padding: "0.5rem",
+        borderRadius: "15px",
+        backgroundColor: "white",
+        cursor: "pointer",
+        transition: "all 0.2s",
+        boxShadow: crispShadow1px,
+        "&:hover": {
+          boxShadow: wideShadow2px,
+          transform: "translateY(-5px)",
+        }
+      }}
+    >
+      <Flex direction="column" justify="center" align="center"
+        sx={{
+          padding: "15px", borderRadius: "50%", border: "1px solid white"
+        }}
+      >
+        <AiFillFile size={32} />
+      </Flex>
+      <Text mt={3} size="lg">
+        { `${uploadItem.fileName.slice(0, 10)}...` }
+      </Text>
+    </Flex>
+  );
+}

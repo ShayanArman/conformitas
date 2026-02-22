@@ -1,0 +1,101 @@
+import AssistantV2 from "@components/EmailCleaner/outlook/Assistant";
+import { WorkflowCard } from "@components/workflows/WorkflowCard";
+import { useLabelsContext } from "@hooks/useLabelsInfoProvider";
+import MainPaymentModal from "@components/MainPaymentModal";
+import { HEADER_HEIGHT_PX } from "@components/Header";
+import { Button, Flex, Title } from "@mantine/core";
+import { useElementSize } from "@mantine/hooks";
+import useIsMobile from "@hooks/useIsMobile";
+import { useRouter } from 'next/router';
+import {type NextPage} from "next";
+import { useState } from "react";
+
+
+const CategoryPage: NextPage = () => {
+  const [openPayment, setOpenPayment] = useState<boolean>(false);
+  const { ref: assistantRef } = useElementSize();
+  const { userInfo } = useLabelsContext();
+  const isMobile = useIsMobile();
+  const router = useRouter();
+  
+  const categoryTypeString: string | string[] | undefined = (router.isReady) ? router.query.CategoryType : undefined;
+  const category: Category | null = retrieveCategory({ categoryTypeObject: categoryTypeString });
+
+  if (!userInfo) {
+    return <></>;
+  } else if (category === null) {
+    return (
+      <Flex direction="column" align="center" p="xl">
+        <Title align='center'>Unknown Workflow Category</Title>
+        <Button mt={20} onClick={() => { router.push("/") }}>
+          Go Back Home
+        </Button>
+      </Flex>
+    );
+  }
+
+  const handleWorkflowClick = (workflow: WorkflowConfig) => {
+    router.push(workflow.route);
+  };
+
+  const enabledWorkflowConfigs = WORKFLOW_CONFIGS.filter((wc) => (wc.category === category && wc.enabled));
+
+  return (
+      <Flex
+        direction="column"
+        align="center"
+        px={0}
+        h={`calc(100vh - ${HEADER_HEIGHT_PX}px)`}
+      >
+        {/* Hero Section */}
+        <Flex justify="center" mt={15} style={{ textAlign: "center", minWidth: "80%" }}>
+          <AssistantV2
+            isMobile={isMobile}
+            mt={0}
+            mb={0}
+            assistantRef={assistantRef}
+            textToShow={getDialog({ category })}
+            wordDelay={100}
+            centerText={true}
+            finalDelay={2000}
+          />
+        </Flex>
+  
+        {/* Workflows Grid */}
+        <Flex justify="center" mt={15} mb={15} gap={15} style={{ padding: "1rem", flexWrap: "wrap", overflow: "scroll" }}>
+          { enabledWorkflowConfigs.map(wFlowConfig => (
+              <WorkflowCard 
+                key={wFlowConfig.id} 
+                workflowConfig={wFlowConfig} 
+                openPayment={() => setOpenPayment(true)} 
+                onClick={() => handleWorkflowClick(wFlowConfig)}
+              />
+            ))
+          }
+        </Flex>
+        <MainPaymentModal
+          opened={openPayment}
+          onClose={() => setOpenPayment(false)}
+          isMobile={isMobile}
+          allowClose={true}
+        />
+      </Flex>
+    )
+};
+
+function getDialog({ category }: { category: Category | null; }) {
+  if (!category) return ['Unknown Category'];
+
+  switch (category) {
+    case Category.EmailCleaner:
+      return [`Email Cleaner Workflows`];
+    case Category.LiteNetwork:
+      return [`Lite Network Workflows`];
+    default:
+      // used to throw error at compile time if a new Category type is added without handling it here.
+      const exhaustiveCheck: never = category;
+      throw new Error(`Unhandled Category case: ${exhaustiveCheck}`);
+  }
+}
+
+export default CategoryPage;

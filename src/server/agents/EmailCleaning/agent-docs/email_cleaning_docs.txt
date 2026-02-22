@@ -1,0 +1,104 @@
+1.
+Each Cleaning Session is associated with a workflowId 
+
+export enum WorkflowStatus {
+  NotStarted="not_started",
+  Ongoing="ongoing",
+  Stopped="stopped",
+  Completed="completed",
+  Error="error"
+}
+
+CollectionItem {
+  processingStatus: "Adding Emails" | "Finished Adding Emails" | "Not Started"
+}
+
+ActionItem {
+  UserAction = "NOT_ACTED" | "USER_ACTION_ASSIGNED"
+  ActionDetails = "move to X" | 'none', 
+  ActionStatus = "OPEN" | "IN_PROCESS" | "COMPLETE"
+}
+
+
+
+i need to talk through a software design problem. 
+So i have this process that goes through an entire email inbox, 
+and finds all emails by notifications@facebook.com and creates a
+ CollectionEvent Row in a DynamoDB table called WorkflowEvents. 
+Then it goes and finds the next batch by the next sender. 
+Okay are you following? 
+The FrontEnd show notifications@facebook.com to the user because the User has yet to "Act" on it. 
+The fact that it is not yet fully processed doesn't matter. Now here's the kicker. 
+While the main process is Processing Notifications@facebook.com, 
+it needs to look through the Collections to see which one needs to be "moved" and where. 
+So then there are "Collections", that are being created by the Process going through emails. 
+Each of these Collections can be labeled as "User Actions said to move this thing there.", 
+status as "Email Processing finished adding all the emails and now if there is a user action can be moved", 
+and 
+"This has both been processed and moved, 
+so therefore nothing can be done of it anymore except historical reference". 
+Now we can either keep all this information IN the Collection ROW itself,
+ but the queries are structured as so. 
+FrontEnd says: "Fetch me a Collection that has no Action on it by the user. 
+so the user may decide what to do.", then FrontEnd says: 
+"Okay user wants to do this to this Collection." 
+Backend says: "are there Collections that are Both DONE PROCESSING 
+and have a User Action? If so, get me that Collection so i may act on it. 
+After I'm done I'm going to update the Collection to Acted, and the User Action to Complete" 
+So here we are. So if we keep all that information in one table on the CollectionItem row itself, 
+then each query we have to look through ALL the CollectionItems to see which match both query criteria. 
+However, if we keep some of the info "CollectionActions" in a different table, then its simply look through the CollectionActions, 
+for each one that is not ACTED UPON, see the associated Collection, 
+if its done processing, then go at the Collection and Act on it, 
+then update both states.
+
+okay so step by step. We organize emails. 
+We start by going through, we find a Collection set its status to Adding Emails. Then we create a Action, with status: 
+"NOT_ACTED", "none", "OPEN". 
+Then we finish organizing all emails. 
+Set collection status to FINISHED ADDING EMAILS. Then we check if there are any actions on the UserAction. 
+If there are, we then do the action, move onto the next collection. 
+As the user is on we go through the Actions, find the first one that's NOT_ACTED. 
+We then send that back up to user and they act on it. If the Workflow is finished Processing all emails, We kick off 
+
+
+
+// *warning *shayan *look here! TODO very very very important. DO NOT show a Restart button once everything is Completed.
+// if it has been < 5 hours.
+// ALSO TODO make sure to not batch Emails within Zero Inbox folders
+// TODO we need to go into shayan's folders and move all emails to the main email. essentially archiving everything.
+// Then again but moving everything to inbox.
+
+// 1. Batch [Ongoing Completed], the status of Child MoveEmails does NOT matter.
+//      What matters is if theres any more Inputs.Open to show the User to Act on.
+// 2. If there's NO more Inputs, but Batch is Ongoing, then we show what the Batch Cleaner
+//      is up to.
+// 3. If Batch is Completed, we ask for the Mover Process. Depending on when it was finished. We simply run it again just to make sure.
+//    if finally that finishes as well. Or its recently finished. If Mover is Processing,
+//    we show the mover Process.
+// 4. Finally, if there's no more Open inputs, Batch is done, no more Inputs to Process,
+//.   we are DONE cleaning. We show them the final Results Page with the actual Completed Card.
+// We take States of all these things, and Show Cards.
+// States are a combination of all these things...
+
+// Simpler put:
+// Has Open Inputs → Show OngoingCard (regardless of Batch status)
+// No Open Inputs + Batch Ongoing → Show Batch progress
+// No Open Inputs + Batch Completed + MoveEmails needed → Start/show MoveEmails
+// No Open Inputs + Batch Completed + MoveEmails Completed → Show CompletedCard
+
+// well not really. completed is a Concept that is derived from all these other things. Batch (done), no more Open Inputs, no more Processing Inputs, all Error Inputs re-tried. And MoveEmails is fully finished Running. Then we say we are "Completed". Ongoing means there's ongoing work to do, either of the above. Ongoing means that either Batch is still running, or there's Open inputs to show the user. OR Mover {Error or Processing Inputs }still running. Completed means none of these things are remaining. We've completed batching, and moving everything that needs to be moved. Nothing remaining to be done.
+
+// Frontend queries the root workflow
+// const workflow = trpc.workflows.getWorkflow.useQuery({ workflowSk });
+
+// // Then asks backend to compute the derived status
+// const { derivedStatus } = trpc.workflows.getWorkflowDerivedStatus.useQuery({ 
+//   workflowSk: workflow.compositeSk 
+// });
+
+// Derived Status.
+// UserInputProcessing: There are open inputs waiting for user decisions
+// BatchOngoing: No open inputs, but batch process is still running
+// MoveEmailsOngoing: Batch done, no open inputs, but MoveEmails is running
+// ShowResults: Everything is complete

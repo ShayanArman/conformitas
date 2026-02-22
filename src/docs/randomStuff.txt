@@ -1,0 +1,140 @@
+// "@mantine/core": "^5.7.1", working version was "^5.7.1",
+
+finished cleaning?
+==================
+did we show them any collections?
+a) On frontEnd, if we have any collections in Viewed (i.e seen anything) then we just show stats of Today, even if they didn't move anything.
+get stats on last 24 hours all ACTED collections.
+"Finished! Here are some stats from today"
+b) if we didn't show them anything, show them all stats from last 24 hours. and say: sorry i couldnt find anything. 
+
+{
+    [FolderSlug]: number of emails moved.
+}
+
+apostrophe ' can be escaped with &apos;
+"" can be escpaced with &quot;
+
+
+SEEDing a Database Prisma
+// put at bottom of package.json
+// "prisma": {
+  //   "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  // }
+
+
+change node js locally?
+nvm install
+
+Delete everything code:?
+// try {
+  //   await prisma.$transaction([
+  //     prisma.collection.deleteMany({
+  //       where: { userId },
+  //     }),
+  //     prisma.unsubscribeLink.deleteMany({
+  //       where: { userId },
+  //     }),
+  //     prisma.collectionChunk.deleteMany({
+  //       where: { userId },
+  //     }),
+  //     prisma.dialog.deleteMany({
+  //       where: { userId },
+  //     }),
+  //     prisma.thread.deleteMany({
+  //       where: { userId },
+  //     }),
+  //     prisma.message.deleteMany({
+  //       where: { userId },
+  //     }),
+  //   ]);
+
+How to add Google Analytics Script.
+-        <Script async src="https://www.googletagmanager.com/gtag/js?id=AW-11398102909"></Script>
+-        <Script id="google-analytics">
+-          {`
+-            window.dataLayer = window.dataLayer || [];
+-            function gtag(){dataLayer.push(arguments);}
+-            gtag('js', new Date()); gtag('config', 'AW-11398102909');
+-          `}
+-        </Script>
+
+Payment Modal:
+<ActionIcon
+  radius="lg" 
+  size="md" variant="filled"
+  color="dark"
+  gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
+  onClick={() => signOut()}
+>
+  <IoArrowUndo />
+</ActionIcon>
+<ActionIcon
+  radius="lg" 
+  size="md" variant="filled"
+  color="dark"
+  gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
+  onClick={() => signOut()}
+>
+  <IoArrowUndo />
+</ActionIcon>
+
+type: z.nativeEnum(EventType)
+
+
+// Invalidate Query?
+// Invalidate the workflows list to trigger a refetch in WorkflowsViewer
+// for extra info trpcUtils.workflows.getWorkflowsList.invalidate({ type: workflowType, limitNumber });
+
+
+
+
+Query By Index.
+export async function fetchSubscriptionItem(
+ { stripeSubscriptionId }:
+ { stripeSubscriptionId: string }
+): Promise<{ status: "success" | "error"; subscription: ZeroSubscriptionItem | null }> {
+ try {
+   const result = await dynamo.send(
+     new QueryCommand({
+      TableName: dynamoSchema.getTableName({ table: DynamoTable.paymentEvents }),
+      IndexName: dynamoSchema.PAYMENT_EVENTS_STRIPE_SUBSCRIPTION_ID_GSI_NAME,
+      KeyConditionExpression: `${dynamoSchema.PAYMENT_EVENTS_STRIPE_SUBSCRIPTION_ID_GSI_KEY} = :stripeSubscriptionId`,
+      ExpressionAttributeValues: {
+        ":stripeSubscriptionId": stripeSubscriptionId
+      },
+      ScanIndexForward: false,
+      Limit: 1,  
+     })
+   );
+   return { status: "success", subscription: (result.Items && result.Items.length > 0) ? result.Items[0] as ZeroSubscriptionItem : null };
+ } catch (error) {
+   console.error("Error fetching Subscription from DynamoDB:", error);
+   return { status: "error", subscription: null };
+ }
+}
+
+const command = new QueryCommand({
+  TableName: getTableName({ table: DynamoTable.stripeProducts }),
+  KeyConditionExpression: 'groupId = :groupId',
+  FilterExpression: 'active = :active',
+  ExpressionAttributeValues: {
+    ':groupId': productGroupId,
+    ':active': true,
+  },
+});
+
+the best component ever 
+// function CreditItem() {
+//   const { data, isLoading } = trpc.credits.getTotalCount.useQuery();
+//   if (isLoading || !data) {
+//     return null;
+//   }
+//   return (
+//     <Menu.Item icon={<IconArtboard size={14} />}>
+//       <Text weight="normal">
+//         <Text size="xs">Credit: {data.creditCount} emails</Text>
+//       </Text>
+//     </Menu.Item>
+//   );
+// }

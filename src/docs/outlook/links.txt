@@ -1,0 +1,17 @@
+Move API:
+https://learn.microsoft.com/en-us/graph/api/message-move?view=graph-rest-1.0&tabs=http
+
+Folder types:
+https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0
+
+Folders (creation)
+https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0
+
+Gmail
+https://developers.google.com/gmail/api/guides/labels
+
+Outlook Email Resource
+https://learn.microsoft.com/en-us/graph/api/resources/message?view=graph-rest-1.0
+
+Outlook Graph Search API
+https://learn.microsoft.com/en-us/graph/search-query-parameter?tabs=http

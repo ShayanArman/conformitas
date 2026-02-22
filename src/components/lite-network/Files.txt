@@ -1,0 +1,177 @@
+import { pulseAnimation, crispShadow1px } from "@helpers/styleHelpers";
+import { type UploadItem, UploadStatus } from "types/objects/uploads";
+import type { ViewInfo } from "@helpers/userInfoHelpers";
+import { AiOutlineUpload } from "react-icons/ai";
+import React, { useState, useRef } from "react";
+import { Flex, Text } from "@mantine/core";
+import { MiniFileCard } from "./FileCard";
+import { FileSource } from "types/objects/files";
+import { useRouter } from "next/router";
+import { trpc } from "@utils/trpc";
+import axios from "axios";
+
+export function FilesViewer({ viewInfo }: { viewInfo: ViewInfo }) {
+  const router = useRouter();
+
+  // Query for last 10 file uploads with "Success" status.
+  // Show them.
+  // BUT when a new file is uploaded we show the "empty" card version, outlining its status
+  // or just a Skeleton, and when it appears make it appear with a animation.
+  // Then when the user Clicks the file, they can see all the other information about the workflow etc.
+  return (
+    <Flex w="100%" gap={10} style={{ border: "1px solid #eee", borderRadius: "15px", padding: "5px" }}>
+      <UploadButton viewInfo={viewInfo} />
+      {filesViewerData && filesViewerData.uploadItems.map((uploadItem) => (
+        <MiniFileCard key={uploadItem.id} uploadItem={uploadItem} router={router} />
+      ))}
+    </Flex>
+  );
+}
+
+enum FileUploadStatus {
+  Ready,
+  Uploading,
+  Success,
+  Error,
+}
+
+function UploadButton({ viewInfo }: { viewInfo: ViewInfo }) {
+  const [uploadStatus, setUploadStatus] = useState(FileUploadStatus.Ready);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getUploadUrlMutation = trpc.contacts.createContactUploadPath.useMutation();
+  const updateUploadItemMutation = trpc.fileManager.updateUploadStatus.useMutation();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadStatus(FileUploadStatus.Uploading);
+      setUploadProgress(0);
+      // *warning *lite-network-todo p1 only works for linkedin FileSource currently. 
+      // include other file types post launch
+      if (!file.type) { alert("File type is missing. kindly add the proper extension to the file name be it .json, .xl etc."); return; }
+
+      let uploadItem: UploadItem | undefined = undefined;
+      // step 1: todo shayan test that the uploadItem works. use debugger.
+      const uploadInfo = await getUploadUrlMutation.mutateAsync({
+        fileName: file.name, fileType: file.type, fileSource: FileSource.LinkedIn, entityId: viewInfo.entityId, entityType: viewInfo.entityType
+      });
+      uploadItem = uploadInfo.uploadItem;
+
+      // step 2. update uploadItem status to Uploading
+      ({ updatedItem: uploadItem } = await updateUploadItemMutation.mutateAsync({
+        uploadEntityId: uploadItem.entityId,
+        uploadSk: uploadItem.uploadSk,
+        newStatus: UploadStatus.Uploading
+      }));
+
+      // step 3. actually do the upload
+      const axiosUploadRes = await axios.put(uploadInfo.s3Url, file, {
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            setUploadProgress(percentCompleted);
+          }
+        }
+      }
+      );
+
+      // step 4. if successful update uploaditem to Success
+      if (axiosUploadRes.status === 200) {
+        ({ updatedItem: uploadItem } = await updateUploadItemMutation.mutateAsync({
+          uploadEntityId: uploadItem.entityId,
+          uploadSk: uploadItem.uploadSk,
+          newStatus: UploadStatus.Success
+        }));
+        setUploadStatus(FileUploadStatus.Success);
+      } else {
+        setUploadStatus(FileUploadStatus.Error);
+        ({ updatedItem: uploadItem } = await updateUploadItemMutation.mutateAsync({
+          uploadEntityId: uploadItem.entityId,
+          uploadSk: uploadItem.uploadSk,
+          newStatus: UploadStatus.Failed
+        }));
+        setTimeout(() => {
+          throw new Error(`Upload failed with status: ${axiosUploadRes.status}`);
+        }, 2000);
+        return;
+      }
+
+      setTimeout(() => {
+        setUploadStatus(FileUploadStatus.Ready);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }, 2000);
+    } catch (error) {
+      alert("RELOAD PAGE - Upload failed: " + (error as Error).message);
+      setUploadStatus(FileUploadStatus.Error);
+    }
+  };
+
+  return (
+    <Flex direction="column" gap="xs">
+      <input
+        ref={fileInputRef}
+        type="file"
+        onChange={handleFileSelect}
+        style={{ display: "none" }}
+        accept=".json"
+      />
+      <Flex
+        direction="column"
+        justify="center"
+        align="center"
+        h="9rem"
+        w="8rem"
+        onClick={() => (uploadStatus === FileUploadStatus.Ready) && fileInputRef.current?.click()}
+        sx={{
+          color: "white",
+          padding: "0.5rem",
+          borderRadius: "15px",
+          backgroundColor: "#e64980",
+          cursor: (uploadStatus === FileUploadStatus.Uploading) ? "wait" : "pointer",
+          transition: "all 0.2s",
+          boxShadow: crispShadow1px,
+          animation: (uploadStatus === FileUploadStatus.Uploading) ? `${pulseAnimation} 2s infinite` : undefined,
+          "&:hover": (uploadStatus === FileUploadStatus.Ready) ? {
+            backgroundColor: "white",
+            color: "black",
+            transform: "translateY(-5px)",
+          } : {}
+        }}
+      >
+        <Flex direction="column" justify="center" align="center"
+          sx={{
+            padding: "15px", borderRadius: "50%", border: "1px solid white"
+          }}
+        >
+          <AiOutlineUpload size={32} />
+        </Flex>
+        <Text mt={3} size="lg">
+          {getUploadButtonText({ uploadStatus, uploadProgress })}
+        </Text>
+      </Flex>
+    </Flex>
+  );
+}
+
+// *warning lite-network-todo still left
+// step 5. get workflow and begin processing.
+// step 6. once workflow is finished send email and send user to /products/mina-db/file/<file_id> where the user can initiate "filters" choosing a specific filter.
+const getUploadButtonText = ({ uploadStatus, uploadProgress }: { uploadStatus: FileUploadStatus; uploadProgress?: number }) => {
+  switch (uploadStatus) {
+    case FileUploadStatus.Ready:
+      return "Ready";
+    case FileUploadStatus.Uploading:
+      return (uploadProgress !== undefined && uploadProgress >= 0) ? `${uploadProgress}%` : "Uploading";
+    case FileUploadStatus.Success:
+      return "Success";
+    case FileUploadStatus.Error:
+    default:
+      return "Error";
+  }
+}

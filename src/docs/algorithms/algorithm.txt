@@ -1,0 +1,106 @@
+/** Collection Orchestration Description.
+
+1. First thing is to make a Signal Process telling the System we've begun 
+   Collection Creation for User.
+
+Then...
+
+1. <= Go through ALL emails =>
+   Label all the emails AND OR find Chats AND OR Find Simple Collections
+
+2. <= Create Collections from Labels =>
+   After all emails have been labeled, then we begin the Creation of Collections from the labels.
+   Using bottom up ontology of emails.
+
+/** Collection Orchestration Description.
+
+
+
+/** Start Step 1. Labeling and Simple Collection Creation. ======
+let keepPinging = true;
+let nextPageToken = undefined;
+
+while(keepPinging) {
+    let emails = await EmailAPI.listEmails("INBOX", nextPageToken);
+    let dbEmails = await DB.getEmailsWithID(emails.map(email => email.id));
+
+    for each email in emails () {
+        // if there's already a label, or part of a Collection, we know that this email has been processed.
+        let dbEMail = dbEmails.filter(dbEmail => dbEmail.id === email.id);
+        // Either has been labeled (not recently) || It's in a collection (not expired).
+        // An email can be labeled, but we still need to process it here.
+        // Because this section also creates Chat Collections and creates Simple Collections.
+        let isProcessed = dbEmail && !isExpired(dbEmail) && (dbEmail.labels || dbEmail.collectionId );
+
+        if (isProcessed) {
+            continue;
+        }
+
+        let isChat = isEmailPartOfChat(email);
+        // Chats are outside of simple labeling bc they only require enough User Replies
+        if (isChat) { 
+            let chatEmails = get all emails in this chat();
+            createChatCollection(chatEmails); // save all these emails in DB.
+
+            if (not big enough to create collection) {
+                // label and save
+                // this tells the alogrithm next time around that we already processed this.
+            }
+
+            continue;
+        }
+
+        // If not labeled Call AI Labeling System.
+        if (!dbEmail?.labels) { // leave this here Connor. lol.
+            let labels: [Labels] = await getLabels(email);
+            dbEmail = await saveOrUpdateDBEmail(email, labels);
+        }
+        
+        // Try to make a Collection quickly. \\
+
+        // Based on labels, is this email a simple email?
+        // Try to quickly make a Collection in this step. So user doesn't have to wait.
+        if (email === simple email) {
+            let emailsFromSender = await getAllEmailsFromSender(email.sender);
+            emailsFromSender.map(email => getLabels(email)) // Label all the emails.
+            let filtered = emailsFromSender.filter(email => return isSimple(email));
+            
+            // Do we have enough here for a full collection?
+            if (filtered > 50) {
+                Create Simple Collection.
+            }
+        }
+    }
+
+    nextPageToken = listMessagesResponse.nextPageToken;
+    keepPinging = nextPageToken ? true : false;
+}
+/** Finished Step 1. ======
+
+
+/** Start Step 2. Create Collections from Labels ======
+
+let categories = [Flights {subcategories: Promotions, Bookings}, Appointments {subcategories: from.}, Receipts {subcategories: from.}, Newsletters {subcategories: from.}, Wallet{individual cards.} ];
+
+for category in categories {
+    Query (Category.Subcategory) <--- we might be able to automate this. 
+    // Let's say Flights. Then filter based on similar labels. 
+    // Flights->
+    // [Flight, Booking] [Flights, Booking] [Flights, Booking] <--- Sort by Sender.
+    // [Flights, Promo] [Flights, Promo] [Flights, Promo] <--- Sort by Sender
+         Sort by Sender.
+             Result =>
+                    For each Result. Is there enough for a Collection? If so, Create Collection.
+                    Otherwise, try to combine emails that have the exact same Labels. Other than "FROM".
+
+                    Ex->
+                     150 Flight Promotions from Air Canada
+                     { 200 Flight Promotions from Westjet } => Enough for a Collection.
+
+                     { 15 Flight Bookings from United.
+                     35 Flight Bookings from Delta } too small so we have to combine these into a single collection.
+}
+
+/** Finished Step 2. ======
+
+

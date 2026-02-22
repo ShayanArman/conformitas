@@ -1,0 +1,122 @@
+All products will be based on Access to "Tiers"
+and the length of time that access is granted.
+
+Trial -> [Products...] for one Hour (one time payment)
+Basic -> [Products...] for one Month on renewal
+Plus -> [Products...] for one Month on renewal
+Pro -> [Products...] for one Month on renewal
+
+A customer will have a userPurchases of all "Products" they've ever bought or been 'added to'
+If they get 'added' to a Product, that's an organization Add, we link to the Organization.
+Upon "renewal", the Organization itself gets 'renewed'... we update all the users.
+
+
+The point is to design the system where we can 'eventually' add this functionality, if the userPurchases is Generic Enough.
+
+
+
+
+... Aug 14th 7pm.
+I believe that payments is essentially access rights for a User.
+What does this user have access to?
+Keeping track of how they paid for that access is valuable as well.
+
+Firstly when the user logs in, we quickly check what that user has access to in an easy to understand way by the frontend + backend.
+This data structure encapsulates this access.
+1. Currently we do this by sending up the ProductTier that the user has an Active access to.
+
+
+
+
+
+Now if they do not have access to anything, they are a Free User.
+We simply show them the Payment Modal that shows access rights to everything and choices for what they wish to access.
+2. These are called Products.
+
+
+3. Then the user can make a Choice to pay via the Payment Modal.
+
+
+4. Once the purchase is finished, they are AND OR sent to /payments?Success, we retrieve the item they bought, 
+update it to Paid, AND OR webhook is called that the item is paid, we update the Payment Transaction, and grant them access in the 
+Backend.
+- Now that they have access, we have to 'reload' the FrontEnd access Right to this object, 
+- boom we show them the Receipt
+-  we send them to the Front Page.
+
+
+
+Description: 
+
+Basic: Includes all Email Cleaner Workflows. All future Email Cleaning and Organizing workflows also will be added to this Pack.
+Plus: Includes Email, and Sales Workflows. All future Sales and Email workflows also will be added to this Pack.
+Pro: Includes Email, Sales, and Accounting Workflows. All future workflows also will be added to this Pack.
+Trial: Try out the site. All workflows available to you for a number of hours to get a feel for how things work. You can always click Boost in the top right corner if you decide its the right fit! If you have any questions you can always email us at sarman@zeroinbox.ai
+
+MetaData:
+displayName ----> Trial, Basic, Plus, Pro,
+zeroProductId -------> basic_email_cleaner, plus_sales, pro_all_categories, trial_one_hour
+days -----------> 30, 0
+hours ----------> 1
+is_subscription > yes, no
+
+
+
+
+random docs
+
+// Basically payments is 1) "Give us something", then 2) "We give you something"
+// This page illustrates 2. What we give them.
+// The issue is, once a payment goes through, this needs to be retrieved, so the system knows if 
+// the proper product has been Given already or not? 
+// OR if the payment updates, to update the Product.
+
+
+// With this model of payments, we can technically accept any form of payment,
+// By any entity, and it fans out to Users assigned,
+// And we can sell multiple types of Products that can be active either Subsets at once or just one at a time.
+// We can sell single trials for different Products, keep it active for a time, 
+// We can sell Promos, anything.
+// We would find all their Access rights, loop through the ones that are "active", and truly so,
+// and see what Products those Rights have access to.
+// Currently we have a Category model, where the user gets access to Categories.
+// Each product id that we sell can even have access right functions.
+
+// Since they made a Stripe purchase on our Site.
+// We look up the Product that they purchased, to see what they have access to.
+
+// Time Remaining
+// Credit Remaining
+// Is Active. *current
+// Categories Active: *current
+// Workflows Active: // *future.
+
+**old**
+// So Payments table manages actual Money going into our accounts.
+// This table is the Result of that Purchase.
+// 1) So if an org pays for something, we update the Org that it has certain products,
+// and all its users with those products.
+// 2) if a user makes a Personal payment for a product, payments keeps track of the Transaction.
+
+// TimedAccess; -> to a product or a service.
+// CreditAccess; -> to a product or a service.
+// UnlimitedAccess; -> to a product or a service.
+
+// Who has access? entity is an org? then we must have the number of org members.
+// if its not an org then we know only the user does.
+
+
+// so here's my process. 
+// a user uploads a file. we keep that in the uploads table. 
+// that upload is kept. now after the upload is finished frontend tells backend "upload" finished.
+//  We update it and return to the user the Completed Upload object. 
+//  Then the front end "initiates" a Sync Contacts using that Upload. 
+//  SyncContacts#FileUpload#fileUploadId. We look that up to see if there's already one starting. 
+//  Then we simply start it. We return the Workflow to FrontEnd. 
+//  The FrontEnd then shows the File, and goes to the file page, /mina-db/file/<file_id>. 
+//  There we show the file being processed.
+
+*total Description
+Either Service or Access or ServicePlusAccess
+Access just needs duration and memberCount if Org.
+duration is (durationDays * 24 + (durationHours)).

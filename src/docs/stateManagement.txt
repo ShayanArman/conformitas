@@ -1,0 +1,111 @@
+enum CollectionJobStage {
+  ADDING_TO_LABELER
+  UPDATING_MESSAGES
+  WAITING_FOR_LABELING
+  CREATING_COLLECTIONS
+  DONE_CREATING
+}
+
+status: "ready" | "keepPolling" | "doneCleaning";
+subStatus?: "initialIntake" | "updateIntake" | "creating" | "aiLabeling";
+
+pollForCollection simply asks the question do we have Fresh Collections?
+    -yes: return { status: "ready", collection: collection }
+    -no: return { status: "keepPolling" | "doneCleaning" }
+If not, make some.
+
+switch (CollectionJob):
+    case none:
+        changeStatus -> ADDING_TO_LABELER. begin initialIntake.
+        return { status: "keepPolling", subStatus: "initialIntake" }
+    case ADDING_TO_LABELER:
+        0-20 seconds: then make a quick collection, return keepPolling, initialIntake
+        20-60 seconds: make a quick collection, stalled, simply restart, return keepPolling, initialIntake
+        > 1 min: start initial intake from scratch. return keepPolling, initialIntake
+    case UPDATING_MESSAGES:
+        0-20 seconds: return keepPolling, updateIntake
+        20-60 seconds: stalled, restart. return keepPolling, updateIntake
+        > 1 min: start from scratch. return keepPolling, updateIntake
+    case WAITING_FOR_LABELING:
+        { 0-5 seconds: return keepPolling, aiLabeling
+        5-30 seconds: return keepPolling, aiLabeling
+        30-5 minutes: return true. }
+        if (doneLabeling) {
+            // start creating collections
+            return { status: "keepPolling", subStatus: "creating" }
+        } else {
+            return { status: "keepPolling", subStatus: "aiLabeling" }
+        }
+
+        > 5 min: start updatingMessages. return keepPolling, updateIntake.
+
+        are messages done labeling? 
+    case CREATING_COLLECTIONS:
+        0-20 seconds: return { status: "keepPolling", subStatus: "creating" }
+        20-5minutes: stalled. start again. return { status: "keepPolling", subStatus: "creating" }
+        >5 minutes: begin updating again.
+        return { status: "keepPolling", subStatus: "updateIntake"}
+    case DONE_CREATING:
+        0-8min: return { status: "doneCleaning" }
+        // there are no new collections, and none have likely expired.
+        8min-15min: 
+        // try to make more collections. because some might have expired.
+        return { status: "keepPolling", subStatus: "creating"}
+        > 15min: // updateIntake.
+        return { status: "keepPolling", subStatus: "updateIntake"}
+
+
+
+
+
+OLD
+export async function manageCollectionJobDELETE(
+  ctx: ProtectedContext
+): Promise<{ 
+  status: "keepPolling" | "doneCleaning",
+  subStatus?: "initialIntake" | "updateIntake" | "creating" | "aiLabeling"}> {
+  // @Todo is null means keepPolling. Find a better way of signalling from intakeManager.
+  // This is obviously bad but keep for now.
+  const collectionJob: CollectionJob | null = await intakeInboxMessagesIfNeeded(
+    ctx
+  );
+
+  if (!collectionJob) {
+    return { status: "keepPolling" };
+  }
+
+  switch (collectionJob.stage) {
+    case CollectionJobStage.ADDING_TO_LABELER:
+      await generateQuickCollections(ctx, collectionJob);
+      return { status: "keepPolling", subStatus: "initialIntake" };
+    case CollectionJobStage.UPDATING_MESSAGES:
+      return { status: "keepPolling", subStatus: "updateIntake" };
+    case CollectionJobStage.WAITING_FOR_LABELING:
+      const doneLabeling: boolean = await isDoneLabeling(ctx, collectionJob);
+      if (doneLabeling) {
+        await startFullCollectionsCreationJob(ctx, collectionJob);
+        return { status: "keepPolling", subStatus: "creating" }
+      } else {
+        return { status: "keepPolling", subStatus: "aiLabeling" }
+      }
+    case CollectionJobStage.CREATING_COLLECTIONS:
+      if (DateHelpers.milliSinceDate(collectionJob.updatedAt) > (20 * 1000)) {
+        // been longer than 20 seconds to create full collections. probably broke.
+        await startFullCollectionsCreationJob(ctx, collectionJob);
+      }
+      return { status: "keepPolling", subStatus: "creating" };
+    case CollectionJobStage.DONE_CREATING:
+      // If under 45 minutes, we don't update emails in their INBOX.
+      // But collections expire after 10 minutes. So we need to run this again.
+      // @TODO try to create some after 10 minutes to account for any expired Collections.
+      // However, if unable to Create, then restart updated Intake.
+      if (DateHelpers.milliSinceDate(collectionJob.updatedAt) > (COLLECTION_CREATION_FINISHED_MILS)) {
+        await startFullCollectionsCreationJob(ctx, collectionJob);
+        return { status: "keepPolling", subStatus: "creating" };
+      } else {
+        return { status: "doneCleaning" };
+      }
+    default:
+      return { status: "keepPolling" };
+  }
+}

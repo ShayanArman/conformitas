@@ -1,0 +1,57 @@
+import { pulseAnimation, crispShadow1px } from "@helpers/styleHelpers";
+import { AiOutlineUsergroupAdd } from "react-icons/ai";
+import { Flex, Text } from "@mantine/core";
+import React, { useState } from "react";
+
+export function PoolsViewer() {
+  return (
+    <Flex w="100%" style={{ border: "1px solid #eee", borderRadius: "15px", padding: "5px"}}>
+      <CreatePool />
+    </Flex>
+  );
+}
+
+function CreatePool() {
+  const [innerText, setInnerText] = useState<"Create" | "Coming Soon">("Create");
+  const isUploading = false;
+
+  const handleCreatePoolButton = () => {
+    if (innerText === "Coming Soon") return;
+    setInnerText("Coming Soon");
+    setTimeout(() => {
+      setInnerText("Create");
+    }, 1500)
+  }
+
+  return (
+    <Flex direction="column" gap="xs">
+      <Flex 
+        direction="column" 
+        justify="center" 
+        align="center" 
+        h="9rem" 
+        w="8rem"
+        onClick={handleCreatePoolButton}
+        sx={{
+          padding: "0.5rem",
+          borderRadius: "15px",
+          backgroundColor: "white",
+          cursor: isUploading ? "wait" : "pointer",
+          transition: "all 0.2s",
+          boxShadow: crispShadow1px,
+          animation: isUploading ? `${pulseAnimation} 2s infinite` : undefined,
+          "&:hover": !isUploading ? {
+            backgroundColor: "#e64980",
+            color: "white",
+            transform: "translateY(-2px)",
+          } : {}
+        }}
+      >
+        <Flex direction="column" justify="center" align="center" sx={{ padding: "15px", borderRadius: "50%", border: "1px solid white" }}>
+          <AiOutlineUsergroupAdd size={32} />
+        </Flex>
+        <Text mt={3} size="lg">{innerText}</Text>
+      </Flex>
+    </Flex>
+  );
+}

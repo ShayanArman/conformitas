@@ -1,0 +1,165 @@
+ORIGINAL.
+From your terminal output, here's the complete summary of commands you executed:
+PostgreSQL Installation and Setup
+1. Check if PostgreSQL exists
+bashwhich psql
+// Returns "psql not found"
+2. Install PostgreSQL with Homebrew
+bashbrew install postgresql
+// This installed postgresql@14
+3. Start PostgreSQL service
+bashbrew services start postgresql@14
+4. Add PostgreSQL to PATH
+bashecho 'export PATH="/opt/homebrew/opt/postgresql@14/bin:$PATH"' >> ~/.zshrc
+5. Reload shell configuration
+bashsource ~/.zshrc
+Database and User Setup
+6. Connect to PostgreSQL
+bashpsql postgres
+7. Create user with password
+sqlCREATE USER shyguy WITH PASSWORD 'JonJon1993';
+8. Create database with owner
+sqlCREATE DATABASE zeroworkflowlocal OWNER shyguy;
+9. Grant privileges
+sqlGRANT ALL PRIVILEGES ON DATABASE zeroworkflowlocal TO shyguy;
+10. Grant CREATEDB permission
+sqlALTER USER shyguy CREATEDB;
+11. Exit psql
+sql\q
+Testing and Usage
+12. Test connection with app's DATABASE_URL
+bashpsql postgresql://shyguy:JonJon1993@localhost:5432/zeroworkflowlocal
+13. List databases
+sql\l
+// Shows all databases including your new zeroworkflowlocal
+14. Run Prisma migration
+bashnpx prisma migrate dev
+Done! Your PostgreSQL is set up with the database and user ready for your app.
+
+
+
+
+# PostgreSQL Setup Guide for macOS
+
+Complete step-by-step guide to install PostgreSQL, create databases, and set up users for your Next.js application.
+
+## PostgreSQL Installation and Setup
+
+### 1. Check if PostgreSQL exists
+```bash
+which psql
+```
+*Returns "psql not found" if not installed*
+
+### 2. Install PostgreSQL with Homebrew
+```bash
+brew install postgresql
+```
+*This will install postgresql@14*
+
+### 3. Start PostgreSQL service
+```bash
+brew services start postgresql@14
+```
+
+### 4. Add PostgreSQL to PATH
+```bash
+echo 'export PATH="/opt/homebrew/opt/postgresql@14/bin:$PATH"' >> ~/.zshrc
+```
+
+### 5. Reload shell configuration
+```bash
+source ~/.zshrc
+```
+
+## Database and User Setup
+
+### 6. Connect to PostgreSQL
+```bash
+psql postgres
+```
+
+### 7. Create user with password
+```sql
+CREATE USER shyguy WITH PASSWORD 'JonJon1993';
+```
+
+### 8. Create database with owner
+```sql
+CREATE DATABASE zeroworkflowlocal OWNER shyguy;
+```
+
+### 9. Grant privileges
+```sql
+GRANT ALL PRIVILEGES ON DATABASE zeroworkflowlocal TO shyguy;
+```
+
+### 10. Grant CREATEDB permission
+```sql
+ALTER USER shyguy CREATEDB;
+```
+
+### 11. Exit psql
+```sql
+\q
+```
+
+## Testing and Usage
+
+### 12. Test connection with app's DATABASE_URL
+```bash
+psql postgresql://shyguy:JonJon1993@localhost:5432/zeroworkflowlocal
+```
+
+### 13. List databases
+```sql
+\l
+```
+*Shows all databases including your new zeroworkflowlocal*
+
+### 14. Run Prisma migration
+```bash
+npx prisma migrate dev
+```
+
+## Final Database URL
+Your application should use this connection string:
+```
+DATABASE_URL=postgresql://shyguy:JonJon1993@localhost:5432/zeroworkflowlocal
+```
+
+## Common Commands Reference
+
+**Start PostgreSQL:**
+```bash
+brew services start postgresql@14
+```
+
+**Stop PostgreSQL:**
+```bash
+brew services stop postgresql@14
+```
+
+**Connect to database:**
+```bash
+psql postgresql://username:password@localhost:5432/database_name
+```
+
+**List databases:**
+```sql
+\l
+```
+
+**List users:**
+```sql
+\du
+```
+
+**Exit psql:**
+```sql
+\q
+```
+
+---
+
+*Setup completed successfully! Your PostgreSQL database is ready for your Next.js application with Prisma.*

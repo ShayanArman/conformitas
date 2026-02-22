@@ -1,0 +1,36 @@
+import * as dynamoActions from "@server/db/DynamoDB/actions";
+import { protectedProcedure } from "@server/trpc/trpc";
+import { z } from "zod";
+
+// the core logic of this file is misleading.
+// to create a parse statements workflow
+// we first have to upload the file (resource). UploadFile
+// then we create a workflow to reference and work upon that resource.
+export const createParseStatementsWorkflow = protectedProcedure
+.input(z.object({
+  originAddress: z.string(),
+  originType: z.nativeEnum(OriginType).default(OriginType.pdf),
+}))
+.mutation(async ({ ctx, input }) => {
+  const { originAddress, originType } = input;
+  const userId = ctx.session.user.id;
+
+  const baseProps: BaseWorkflowProps = {
+    entityId: userId,
+    entityType: EntityType.UserPersonal,
+    resourceId: userId, // Will be replaced with fileId when file is uploaded (as per getResourceId logic)
+    resourceType: ResourceType.S3File,
+    triggerSourceId: userId,
+    triggerType: TriggerType.UserAction,
+  };
+
+  const result = await dynamoActions.createWorkflow({
+    ctx,
+    baseProps,
+    workflowType: WorkflowType.ParseStatements,
+    originType,
+    originAddress,
+  });
+  
+  return result;
+});

@@ -1,0 +1,408 @@
+import { Button, Flex, Text, LoadingOverlay, Group, Notification, Badge, Collapse } from "@mantine/core";
+import { AiOutlineUpload, AiOutlineDownload, AiOutlineDown, AiOutlineUp } from "react-icons/ai";
+import { containerStyle, crispShadow1px, pulseAnimation } from "@helpers/styleHelpers";
+import { ParseStatementsPayload } from "types/objects/payloads/workflowsloads";
+import { EntityType, WorkflowItem, WorkflowStatus } from "types/objects/workflows";
+import { useState, useRef, useEffect } from "react";
+import useIsMobile from "@hooks/useIsMobile";
+import { trpc } from "@utils/trpc";
+import axios from "axios";
+
+
+// the core logic of this file is misleading.
+// to create a parse statements workflow
+// we first have to upload the file (resource). UploadFile
+// then we create a workflow to reference and work upon that resource.
+
+export type ParseStatementsWorkflow = WorkflowItem & { payload: ParseStatementsPayload };
+
+export function ParseStatementsWorkflowCard({
+  workflow,
+  updateWorkflow,
+}: {
+  workflow: ParseStatementsWorkflow;
+  updateWorkflow: (updatedWorkflow: ParseStatementsWorkflow) => void;
+}) {
+  const isMobile = useIsMobile();
+  // State
+  const [uploadedFiles, setUploadedFiles] = useState<{ name: string; key: string; size: number }[]>(
+    () => (workflow.payload.s3Keys || []).map((key) => ({ name: key.split("-").slice(1).join("-"), key, size: 0 }))
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [csvS3, setCsvS3] = useState<{ key: string; bucket: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Track if a user action is in progress (uploading, starting, removing, etc.)
+  const [userActionLoading, setUserActionLoading] = useState(false);
+
+  // TRPC
+  const lambdaMutation = trpc.workflows.invokeLambda.useMutation();
+  const getPresignDownload = trpc.workflows.invokeLambda.useMutation();
+  const updateUploadedStatements = trpc.workflows.updateUploadedStatements.useMutation();
+  const startWorkflowMutation = trpc.workflows.startWorkflow.useMutation();
+
+  // Helper: get presigned upload url
+  const getPresignedUrl = async (key: string) => {
+    const result = await lambdaMutation.mutateAsync({
+      functionName: "GetUploadPresign",
+      body: {
+        bucket: "development-workflows-user-statement-pdfs",
+        key,
+        expiresIn: 900,
+      },
+    });
+    let payload = result.payload;
+    if (payload && typeof payload.body === "string") {
+      try {
+        payload = { ...payload, ...JSON.parse(payload.body) };
+      } catch (e) {
+        throw new Error("Failed to parse presigned URL body");
+      }
+    }
+    if (!payload.url) throw new Error("Failed to get presigned URL");
+    return payload;
+  };
+
+  // Upload handler
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUserActionLoading(true);
+    try {
+      const newFiles: { name: string; key: string; size: number }[] = [];
+      const newNames: string[] = [];
+      for (const file of Array.from(files)) {
+        if (uploadedFiles.some(f => f.name === file.name && f.size === file.size)) continue;
+        const key = `${workflow.entityId}/${file.name}`;
+        const presignResult = await getPresignedUrl(key);
+        if (presignResult.fields) {
+          const { url, fields } = presignResult;
+          const formData = new FormData();
+          Object.entries(fields).forEach(([k, v]) => formData.append(k, v as string));
+          formData.append("file", file);
+          await axios.post(url, formData, { headers: { "Content-Type": "multipart/form-data" } });
+        } else if (presignResult.url) {
+          await axios.put(presignResult.url, file, {
+            headers: {
+              "Content-Type": file.type || "application/pdf",
+            },
+          });
+        } else {
+          throw new Error("Invalid presign result");
+        }
+        newFiles.push({ name: file.name, key, size: file.size });
+        newNames.push(file.name);
+      }
+      if (newFiles.length > 0) {
+        setUploadedFiles(prev => [...prev, ...newFiles]);
+        updateWorkflow({
+          ...workflow,
+          payload: {
+            ...workflow.payload,
+            s3Keys: [...(workflow.payload.s3Keys || []), ...newFiles.map(f => f.key)],
+            pdfsUploaded: (workflow.payload.pdfsUploaded || 0) + newFiles.length,
+            uploadedStatementNames: [...(workflow.payload.uploadedStatementNames || []), ...newNames],
+          }
+        });
+      }
+    } catch (err) {
+      setError((err as Error)?.message || "Failed to upload file(s)");
+    } finally {
+      setUserActionLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // Start workflow lambda
+  const handleStartLambda = async () => {
+    setError(null);
+    const keys = uploadedFiles.map(f => f.key).filter(Boolean);
+    if (!uploadedFiles.length || keys.length === 0) {
+      setError("Please upload at least one PDF statement before starting the workflow.");
+      return;
+    }
+    setUserActionLoading(true);
+    try {
+      // Use the correct mutation to update workflow status to Ongoing
+      const res = await startWorkflowMutation.mutateAsync({
+        workflowPk: workflow.entityId,
+        workflowSk: workflow.compositeSk,
+      });
+      if (res.status !== "success" || !res.updatedWorkflow) {
+        setError("Failed to update workflow status");
+        setUserActionLoading(false);
+        return;
+      }
+      // CAL_SHAYAN_UPDATE I added a line here to start the lambda with the *Updated workflow in case it changed.
+      updateWorkflow(res.updatedWorkflow as ParseStatementsWorkflow);
+      // CAL_WORKFLOW_ORIGIN_REQUEST -> does this initiate the lambda from the backend?
+      // Should we put this in the orchestrator, just to make sure everything is the same/
+      // Maybe we can add a BOolean on the WorkflowSchema saying: Is this executed on EC2 or On LAMBDA.
+      await lambdaMutation.mutateAsync({
+        functionName: "StatementsToCsvsInitiator",
+        body: {
+          keys,
+          userId: (res.updatedWorkflow.entityType === EntityType.UserPersonal ? res.updatedWorkflow.entityId : res.updatedWorkflow.triggerSourceId),
+          compositeSk: res.updatedWorkflow.compositeSk,
+          workflowId: res.updatedWorkflow.workflowId,
+          workflowType: res.updatedWorkflow.workflowType,
+        },
+      });
+    } catch (err) {
+      setError((err as Error)?.message || "Failed to start workflow");
+    } finally {
+      setUserActionLoading(false);
+    }
+  };
+
+  // Remove uploaded statement from workflow and persist (update to show loader)
+  const handleRemoveStatement = async (name: string) => {
+    // Defensive: Only proceed if file exists in uploadedFiles and workflow.s3Keys
+    const fileExists = uploadedFiles.some(f => f.name === name);
+    const s3KeyExists = (workflow.payload.s3Keys || []).some(key => key.endsWith(`${name}`));
+    if (!fileExists || !s3KeyExists) return;
+    setUserActionLoading(true);
+    try {
+      const newNames = (workflow.payload.uploadedStatementNames || uploadedFiles.map(f => f.name)).filter(n => n !== name);
+      await updateUploadedStatements.mutateAsync({
+        workflowPk: workflow.entityId,
+        workflowSk: workflow.compositeSk,
+        uploadedStatementNames: newNames,
+      });
+      updateWorkflow({
+        ...workflow,
+        payload: {
+          ...workflow.payload,
+          uploadedStatementNames: newNames,
+          s3Keys: (workflow.payload.s3Keys || []).filter((key) => !key.endsWith(`${name}`)),
+          pdfsUploaded: Math.max(0, (workflow.payload.pdfsUploaded || 0) - 1),
+        }
+      });
+      setUploadedFiles((prev) => prev.filter(f => f.name !== name));
+    } finally {
+      setUserActionLoading(false);
+    }
+  };
+
+  // Start a new workflow (reset all state)
+  const createParseStatementsMutation = trpc.workflows.createParseStatementsWorkflow.useMutation();
+  const handleStartNewWorkflow = async () => {
+    setCollapsed(false); // Expand the collapse when starting a new workflow
+    const newOriginAddress = `statements${Date.now()}`;
+    const result = await createParseStatementsMutation.mutateAsync({
+      originAddress: newOriginAddress,
+      originType: workflow.originType,
+    });
+    if (result.status === "success" && result.workflow) {
+      updateWorkflow(result.workflow as ParseStatementsWorkflow);
+      setUploadedFiles([]);
+      setCsvS3(null);
+      setError(null);
+    } else {
+      setError("Failed to start a new workflow");
+    }
+  };
+
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Add back the handleDownloadCsv function using the presign lambda
+  const handleDownloadCsv = async () => {
+    if (!csvS3) return;
+    try {
+      const result = await getPresignDownload.mutateAsync({
+        functionName: "GetDownloadPresign",
+        body: {
+          bucket: csvS3.bucket,
+          key: csvS3.key,
+          expiresIn: 900,
+        },
+      });
+      let payload = result.payload;
+      if (payload && typeof payload.body === "string") {
+        try {
+          payload = { ...payload, ...JSON.parse(payload.body) };
+        } catch (e) {
+          setError("Failed to parse download URL");
+          return;
+        }
+      }
+      if (payload.url) {
+        window.open(payload.url, "_blank");
+      } else {
+        setError("Failed to get download URL");
+      }
+    } catch (err) {
+      setError("Failed to get download URL");
+    }
+  };
+
+  useEffect(() => {
+    if (workflow && workflow.payload.csvS3) {
+      setCsvS3(workflow.payload.csvS3);
+      if (workflow.status === WorkflowStatus.Completed) {
+        setCollapsed(false); // Expand the collapse when workflow is completed
+      }
+    } else {
+      console.log("No CSV S3 attribute found in workflow");
+    }
+  }, [workflow]);
+
+  return (
+    <Flex
+      direction="column"
+      align="center"
+      mt={10}
+      mb={10}
+      p={15}
+      w={isMobile ? "90%" : "50%"}
+      sx={{
+        ...containerStyle,
+        borderRadius: "8px",
+        backgroundColor: "#fff",
+        boxShadow: crispShadow1px,
+        position: "relative",
+        overflow: "hidden",
+        border: `1px solid ${error ? 'red' : 'transparent'}`,
+        minWidth: 0, // Prevents overflow issues in flex layouts
+        ...(workflow.status === WorkflowStatus.Ongoing
+          ? { animation: `${pulseAnimation} 2s infinite` }
+          : {}),
+      }}
+    >
+      <LoadingOverlay visible={userActionLoading} overlayOpacity={0.7} />
+      <Group position="apart" mb="md" style={{ cursor: "pointer", minWidth: "100%" }} onClick={() => setCollapsed((c) => !c)}>
+        <Text weight={500} size="lg" sx={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <AiOutlineUpload size={24} />
+          Parse Statements Workflow
+        </Text>
+        <Group>
+          <Button
+            variant="outline"
+            color="red"
+            onClick={(e) => { e.stopPropagation(); handleStartNewWorkflow(); }}
+            loading={userActionLoading}
+            sx={{ height: 36 }}
+          >
+            New
+          </Button>
+          <Button
+            variant="subtle"
+            color="gray"
+            px={6}
+            style={{ minWidth: 32, height: 36 }}
+            onClick={(e) => { e.stopPropagation(); setCollapsed((c) => !c); }}
+          >
+            {collapsed ? <AiOutlineDown size={18} /> : <AiOutlineUp size={18} />}
+          </Button>
+        </Group>
+      </Group>
+      <Collapse in={!collapsed} transitionDuration={250}>
+        <Text size="sm" color="dimmed" mb="md">
+          Upload your PDF statements here. We will parse them and create a CSV file for your records.
+        </Text>
+        <input
+          type="file"
+          accept="application/pdf"
+          onChange={handleFileChange}
+          ref={fileInputRef}
+          style={{ display: "none" }}
+          disabled={workflow.status === WorkflowStatus.Ongoing}
+          multiple // <-- allow multiple file selection
+        />
+        <Group position="left" spacing="xs" mb="md">
+          <Button
+            variant="default"
+            onClick={() => fileInputRef.current?.click()}
+            leftIcon={<AiOutlineUpload size={16} />}
+            loading={userActionLoading}
+            disabled={workflow.status === WorkflowStatus.Ongoing}
+          >
+            Upload PDF Statement
+          </Button>
+          <Button
+            variant="filled"
+            onClick={handleStartLambda}
+            leftIcon={<AiOutlineDownload size={16} />}
+            loading={userActionLoading}
+            disabled={uploadedFiles.filter(file => (workflow.payload.s3Keys || []).some(key => key.endsWith(`${file.name}`))).length === 0 || workflow.status === WorkflowStatus.Ongoing}
+          >
+            Start Parsing
+          </Button>
+        </Group>
+        {error && (
+          <Notification
+            color="red"
+            onClose={() => setError(null)}
+            mb="md"
+            sx={{ borderRadius: "8px" }}
+          >
+            {error}
+          </Notification>
+        )}
+        {uploadedFiles.length > 0 && (
+          <Flex direction="column" gap="xs" mb="md">
+            {uploadedFiles.filter(file => (workflow.payload.s3Keys || []).some(key => key.endsWith(`${file.name}`))).map((file) => (
+              <Flex
+                key={file.key}
+                justify="space-between"
+                align="center"
+                p="xs"
+                sx={{
+                  borderRadius: "8px",
+                  backgroundColor: "#f7f7f9",
+                  border: `1px solid ${error ? 'red' : 'transparent'}`,
+                }}
+              >
+                <Text size="sm" weight={500} sx={{ flex: 1 }}>
+                  {file.name}
+                </Text>
+                <Group spacing="xs">
+                  <Badge color="blue" variant="light" size="sm">
+                    {Math.round(file.size / 1024)} KB
+                  </Badge>
+                  <Button
+                    variant="subtle"
+                    color="red"
+                    size="xs"
+                    onClick={() => handleRemoveStatement(file.name)}
+                    loading={userActionLoading}
+                  >
+                    Remove
+                  </Button>
+                </Group>
+              </Flex>
+            ))}
+          </Flex>
+        )}
+        {csvS3 && (
+          <Flex
+            direction="column"
+            p="md"
+            sx={{
+              borderRadius: "8px",
+              backgroundColor: "#eef9ee",
+              border: `1px solid ${error ? 'red' : 'transparent'}`,
+            }}
+          >
+            <Text size="sm" weight={500} mb="xs">
+              Workflow Completed
+            </Text>
+            <Text size="sm" color="dimmed" mb="md">
+              Your CSV file is ready. You can download it using the link below.
+            </Text>
+            <Button
+              onClick={handleDownloadCsv}
+              variant="filled"
+              color="green"
+              size="md"
+              leftIcon={<AiOutlineDownload size={16} />}
+            >
+              Download CSV
+            </Button>
+          </Flex>
+        )}
+      </Collapse>
+    </Flex>
+  );
+}

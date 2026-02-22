@@ -1,0 +1,99 @@
+.pageRoot {
+  width: 100%;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(55, 181, 254, 0.2), transparent 40%),
+    radial-gradient(circle at 90% 20%, rgba(13, 162, 198, 0.16), transparent 35%),
+    linear-gradient(180deg, #f7fbff 0%, #ffffff 60%);
+}
+
+.pageContainer {
+  padding-top: 1.75rem;
+  padding-bottom: 2.5rem;
+}
+
+.heroCard {
+  border-color: #d8e5f3;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(2px);
+}
+
+.eyebrow {
+  letter-spacing: 0.08em;
+  color: #0d6d87;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.heroTitle {
+  color: #0f2f3a;
+  line-height: 1.15;
+}
+
+.heroSubtitle {
+  color: #284552;
+  max-width: 65ch;
+}
+
+.demoSection {
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid #dce9f6;
+  background: rgba(245, 251, 255, 0.75);
+}
+
+.demoLabel {
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+  color: #1c566b;
+}
+
+.loadingState {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #dbe8f5;
+  background: rgba(255, 255, 255, 0.75);
+  align-items: center;
+}
+
+.resultCard {
+  border-color: #d9e8f5;
+}
+
+.resultTitle {
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: #163947;
+}
+
+.interviewCard {
+  border-color: #cfe1ef;
+  background: linear-gradient(180deg, #f8fcff 0%, #f4f9fd 100%);
+}
+
+.sectionLabel {
+  font-weight: 700;
+  color: #1a4b5d;
+  margin-bottom: 0.25rem;
+}
+
+.briefCard {
+  border-color: #cfe1ef;
+  background: #ffffff;
+}
+
+.briefPre {
+  margin: 0;
+  padding: 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #dfebf5;
+  background: #f7fbff;
+  color: #1a3947;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  max-height: 320px;
+  overflow: auto;
+}

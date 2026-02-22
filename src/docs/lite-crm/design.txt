@@ -1,0 +1,35 @@
+// Its mainly about finding the intersection of all these contacts first. THEN running a filter on them.
+/* 
+** ----- Overview -----
+** Upload all contact file types, we "Sync" them into a "Pool"
+** Other Org users can then "Upload" their own Contacts into the DB, in their own "Pool",
+** these Pool views are necessary, because it can get crazy if you have 3/4 Users Uploading "Pools",
+** Also a potential source of extra contacts: "Hey Shayan, can I have your Pool?"
+** ------ AI etc.  -----
+** AI: is mainly used here in the `Filters` where we create Filters around the Contacts
+** Depending on the tier of the Org, we will have different numbers of filters. Since we need to effectively keep track of all filters.
+** ------ Steps    -----
+** 1) ingest 
+** 2) sync / enrich (find common contacts from icloud and gmail and indtgram etc) 
+** 3) filter (make sure we only show the user the ones that fit their criteria)
+*/
+
+/*
+**  Paths
+**  /lite-network
+**  /pools   -> { 
+      functions: [], 
+      workflows: [] 
+    }
+** we see each *Pool by /pool/?pool-name=<pool-unique-name>&filter=<filter-name>
+** we see all-org contacts by /pool/?pool-name=<org-name>&filter=<filter-name>
+** this is because a Pool can have multiple "filters" on it that have ran before
+**  /uploads -> { 
+      functions: [], 
+      workflows: [ (upload file), (sync contacts / find intersections) ]
+    }
+**  /filters -> { 
+      functions: [ (createFilter), (getFilters) ], 
+      workflows: [ ( run filter on all contacts in org ) ]
+    }
+*/

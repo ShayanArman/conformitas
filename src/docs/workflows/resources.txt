@@ -1,0 +1,41 @@
+// Warning* not used by anything.
+// Keep this here as a reference. This is a blanket function for 
+// Unlocking ALL resources.
+// You want to Stop all Workflows that use this resource.
+// That will automatically unlock the resource.
+export async function freeUpResources(
+  { ctx, workflow }: 
+  { ctx: ProtectedContext; workflow: WorkflowItem }
+): Promise<{ status: "success" | "error" }> {
+  try {
+    const flowSchema = flowSchemas.getWorkflowSchema({ workflowType: workflow.workflowType, originType: workflow.originType });
+    // Phase 1: Stop all workflows using these resources
+    for (const resourceSchema of flowSchema.resources) {
+      const { status: fetchStatus, resource: resourceItem } = await dynamoActions.fetchResource({ 
+        ctx, 
+        resource: resourceSchema 
+      });
+      
+      if (fetchStatus !== "success") return { status: "error" };
+      if (resourceItem === null) continue;
+      
+      // Stop any workflow currently using this resource
+      if (resourceItem.lockedBy !== null) {
+        const workflowItem = await dynamoActions.getWorkflowItem<WorkflowItem>({ 
+          ctx, 
+          workflowSk: resourceItem.lockedBy 
+        });
+        
+        if (workflowItem === null) return { status: "error" };
+        
+        const stopResult = await forceStopWorkflow({ ctx, workflow: workflowItem });
+        if (stopResult.status !== "success") return { status: "error" };
+      }
+    }
+    
+    return { status: "success" };
+  } catch (error) {
+    ctx.logger.error("Error freeing up resources:", error);
+    return { status: "error" };
+  }
+}

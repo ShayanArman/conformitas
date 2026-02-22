@@ -1,0 +1,68 @@
+// Instructions for how to finish this file. 
+// Managing the actual orchestration between workflows, and resource Management
+// Occurs in /orchestrator/orchestrate.ts file. 
+// But finish this file first.
+
+
+// Managing state of the Workflows works across all Workflows.
+// But Kicking off a new workflow, we must call Workflow Orchestrator.
+// Because that resource might be locked up. 
+// So any workflow 'Start', or 'Restart' Actions, we can return 
+// resource_in_use with the Workflow that currently owns the resource.
+// Once user stops that resource owning Workflow, they can try again.
+// Show them a popup on front end to stop the other workflow.
+
+
+// switch (workflow.status)
+
+// case WorkflowStatus.Ongoing // Moving. -> {Stop} allowed
+// WorkflowAction.Stop -> 
+// a) Update WorkflowItem.status to WorkflowStatus.STOPPED
+//    Update WorkflowItem.externalActions to WorkflowAction.Stop
+//    update updatedAt to now
+// -- If resource is in use, update the resource to Open.
+// b) Return the updated Workflow item.
+
+// Explanation -> // Since managing state of the Workflows adds complexity.
+// Pause and Kill mean the same thing. 
+// -- Stop the workflow. Change its WorkflowStatus, and update externalActions. 
+// Remove Resource.
+
+// case WorkflowStatus.Stopped // Not moving. -> {Restart} allowed
+// WorkflowAction.Restart -> 
+// -- If resource is in use, return resource_in_use with the Workflow that currently owns the resource.
+// -- If not in use, 
+// a) Create a new WorkflowItem with WorkflowStatus.ONGOING; 
+//    WorkflowItem.externalActions to WorkflowAction.Start
+// b) Kick off the 'workflow'
+// c) Return the new Workflow with ONGOING state
+// if restart, we kill it, create a new workflow with state ongoing, 
+// and kick off the 'workflow'.
+
+// case WorkflowStatus.Completed // Not moving. -> {Restart} allowed.
+// WorkflowAction.Restart -> 
+// -- If resource is in use, return resource_in_use with the Workflow that currently owns the resource.
+// -- If not in use, 
+// a) Create a new WorkflowItem with WorkflowStatus.ONGOING; 
+//    WorkflowItem.externalActions to WorkflowAction.Start
+// b) Kick off the 'workflow'
+// c) Return the new Workflow with ONGOING state
+
+
+// case WorkflowStatus.Error // Not moving. -> {Restart} allowed.
+// WorkflowAction.Restart -> 
+// -- If resource is in use, return resource_in_use with the Workflow that currently owns the resource.
+// -- If not in use, 
+// a) Create a new WorkflowItem with WorkflowStatus.ONGOING; 
+//    WorkflowItem.externalActions to WorkflowAction.Start
+// b) Kick off the 'workflow'
+// c) Return the new Workflow with ONGOING state
+
+
+// Really there's 2 states:
+// A) Not moving 
+// B) Moving
+
+// And only 2 Actions:
+// A) Go.
+// B) Stop.

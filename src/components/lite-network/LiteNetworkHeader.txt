@@ -1,0 +1,28 @@
+import { AiFillCloud, AiOutlineCaretDown } from "react-icons/ai";
+import { pinkTitleContainerStyle } from "@helpers/styleHelpers";
+import { Badge, Flex, Text } from "@mantine/core";
+import React from "react";
+
+export function LiteNetworkHeader({ forceText }: { forceText?: string }) {
+  return (
+    <Flex w="100%" justify={'center'} mt={15} h="4rem" gap={15}>
+      <Flex p={"xs"} justify="center" align="center" w="90%" gap={10} style={{...pinkTitleContainerStyle}}>
+        <Flex justify="center" align="center" sx={{ padding: "4px", borderRadius: "50%", border: "1px solid #eee", "&:hover": { border: "1px solid pink"}}}>
+          <AiFillCloud color="pink"/>
+        </Flex>
+        <Text size="xl" c="pink">{ (!!forceText && forceText.length > 0) ? forceText : `Lite Network` }</Text>
+      </Flex>
+      <Flex
+        direction={'column'} align='center' justify="center"
+        style={{ cursor: 'pointer' }}
+        onClick={() => {
+          // lite-network-todo Add your filter logic here
+          console.log('Filters clicked');
+        }}
+      >
+        <Badge variant="light" color="pink" size="xs">filter</Badge>
+        <AiOutlineCaretDown size={20} color="var(--mina-pink)" />
+      </Flex>
+    </Flex>
+  );
+}

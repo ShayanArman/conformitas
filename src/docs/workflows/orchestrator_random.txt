@@ -1,0 +1,121 @@
+// Only issue remaining is how long a Workflow should own a resource. 
+// if we return resource_in_use. should we check all the workflows and 
+// see if they are still running?
+
+// Either every Workflow has all the Resources that own it...
+// OR, when we fail to Lock a Resource, we check its workflow, and see if its still 
+// Running? If no longer running, we can UNLOCK it. 
+// Also, when we Run a Workflow, We have to Check Which Resources this Workflow 
+// Requires. 
+// And when we Start the Workflow, we have to at the End of the Workflow, 
+// Remove all the Resources that it owns. 
+
+// Perhaps at the top of every Workflow file, we have the Resources that it needs.
+// And when it finishes, Unlock.
+// Also when we stop, we have a Cleanup.
+
+
+// case WorkflowStatus.NotStarted: // Not moving. -> {Start} allowed
+// WorkflowAction.Start -> 
+// -- If resource is in use, return resource_in_use with the Workflow that currently owns the resource.
+// -- If not in use, 
+// a) Update WorkflowItem.status to WorkflowStatus.ONGOING
+//    Update WorkflowItem.externalActions to WorkflowAction.Start
+//    update updatedAt to now
+// b) Kick off the 'workflow'.
+// c) Return the updated Workflow item.
+
+// Step 1. Create a Workflow with NOT_STARTED. 
+// Step 2. Attempt to Lock the Resource with this new Workflow.
+//     - Yes? Update workflow to Ongoing and Start the Workflow and Return the new Workflow.
+//     - No? Delete the Workflow. Return resource_in_use with the Workflow that currently owns the resource. 
+//     ... FrontEnd will have a button, Kill other workflow and Start this one.
+// Step 3: FrontEnd calls Kill Workflow with the owning Resource.
+//  Problem is when we kill a Workflow, how do we know which Workflow is running?
+
+
+export async function startWorkflowddd(
+  { ctx, workflow }: 
+  { ctx: ProtectedContext; workflow: WorkflowItem }
+): Promise<{ 
+  status: "no_op" | "resource_in_use" | "error" | "success"
+  updatedWorkflow: WorkflowItem | null
+}> {
+  if (workflow.status === WorkflowStatus.Ongoing) {
+    return { status: "no_op", updatedWorkflow: null };
+  }
+
+  let newWorkflow: WorkflowItem | null = null;
+  let rollBackChanges: { 
+    unlockResources: boolean, 
+    deleteWorkflow: WorkflowItem | null 
+  } = { 
+    unlockResources: false,
+    deleteWorkflow: null,
+  }
+
+  try {
+    const timestamp = new Date().toISOString();
+    const flowSchema = flowSchemas.getWorkflowSchema({ workflowType: workflow.workflowType, originType: workflow.originType });
+
+    // make a new NotStarted workflow.
+    // POTENTIAL FOR HUGE BUG. TODO WARNING.
+    if (workflow.status !== WorkflowStatus.NotStarted) {
+      const { workflowType, originType, originAddress } = workflow;
+      const { status, workflow: createdWorkflow} = await dynamoActions.createWorkflow({ ctx, workflowType, originType, originAddress });
+      newWorkflow = createdWorkflow;
+      if (status !== "success" || !newWorkflow) {
+        rollBackChanges = { unlockResources: false, deleteWorkflow: newWorkflow };
+        return { status: "error", updatedWorkflow: null };
+      }
+    }
+
+    const canStartWorkflow = await flowSchema.canStart({ ctx, workflowSk: (newWorkflow || workflow).compositeSk });
+    if (!canStartWorkflow) {
+      // Cleanup Resources and Delete the new Workflow we created.
+      rollBackChanges = { unlockResources: false, deleteWorkflow: newWorkflow };
+      return { status: "error", updatedWorkflow: null };
+    }
+  
+    const resourceAccess = await aquireResources({ctx, workflow: newWorkflow || workflow });
+  
+    if (resourceAccess.status !== "success") {
+      // Cleanup Resources and Delete the new Workflow we created.
+      rollBackChanges = { unlockResources: false, deleteWorkflow: newWorkflow };
+      return { status: resourceAccess.status, updatedWorkflow: null };
+    }
+  
+    // We have now Aquired all resources successfully. 
+    // 1. Update the workflow to Ongoing
+    const { status: updatedWorkflowStatus, item: updatedWorkflowItem } = await updateWorkflow<WorkflowItem>({ ctx, workflow: (newWorkflow || workflow), updates: { status: WorkflowStatus.Ongoing, startedAt: timestamp, externalActions: WorkflowAction.Start }});
+    if (updatedWorkflowStatus !== "success" || updatedWorkflowItem === null) {
+      rollBackChanges = { 
+        unlockResources: true, 
+        deleteWorkflow: newWorkflow,
+      };
+      return { status: updatedWorkflowStatus, updatedWorkflow: null };
+    }
+    
+    // 3. Run the function.
+    flowSchema.executeFunction({ ctx, workflow: (newWorkflow || workflow) });
+
+    return { status: "success", updatedWorkflow: updatedWorkflowItem };
+  } catch (error) {
+    ctx.logger.error("Error starting workflow:", error);
+    return { status: "error", updatedWorkflow: null };
+  } finally {
+    // Cleanup.
+    if (rollBackChanges.unlockResources) {
+      await cleanUpResources({ ctx, workflow: newWorkflow || workflow });
+    }
+    if (rollBackChanges.deleteWorkflow) {
+      await dynamoActions.deleteItem({ 
+        ctx, 
+        tableName: dynamoSchema.getTableName({table: DynamoTable.userWorkflows}), 
+        key: { 
+          [dynamoSchema.USER_WORKFLOWS_PK]: ctx.session.user.id, [dynamoSchema.USER_WORKFLOWS_SK]: rollBackChanges.deleteWorkflow.compositeSk 
+        }
+      })
+    }
+  }
+}

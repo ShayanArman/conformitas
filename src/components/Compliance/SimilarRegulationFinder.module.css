@@ -1,0 +1,35 @@
+.panel {
+  border-color: #f1dfc6;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(227, 137, 54, 0.14), transparent 38%),
+    linear-gradient(180deg, #fffaf4 0%, #ffffff 100%);
+}
+
+.title {
+  color: #7a4a15;
+}
+
+.demoSection {
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid #f1dfc6;
+  background: rgba(255, 250, 244, 0.75);
+}
+
+.demoLabel {
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+  color: #8a5316;
+}
+
+.loadingState {
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid #f1dfc6;
+  background: rgba(255, 255, 255, 0.8);
+  align-items: center;
+}
+
+.resultCard {
+  border-color: #f1dfc6;
+}

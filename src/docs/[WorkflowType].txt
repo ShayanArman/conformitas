@@ -1,0 +1,142 @@
+import { SequenceContactsWorkflow, SequenceContactsWorkflowCard } from "@components/workflows/pages/SequenceContactsWorkflowCard";
+import { EntityType, retrieveWorkflowType, WorkflowItem, WorkflowStatus, WorkflowType } from "types/objects/workflows";
+import { SyncContactsWorkflow, SyncContactsWorkflowCard } from "@components/workflows/pages/SyncContactsWorkflowCard";
+import { BatchEmailsWorkflow, CleanEmailsWorkflowCard } from "@components/workflows/pages/CleanEmailsWorkflowCard";
+import { GetWorkflowResponse } from "@server/trpc/router/workflows/getWorkflow";
+import AssistantV2 from "@components/EmailCleaner/outlook/Assistant";
+import { getWorkflowTypeString } from "@helpers/workflowHelpers";
+import { useLabelsContext } from "@hooks/useLabelsInfoProvider";
+import { Button, Flex, Skeleton, Title } from "@mantine/core";
+import { getViewInfo } from "@helpers/userInfoHelpers";
+import useIsMobile from "@hooks/useIsMobile";
+import { useRouter } from 'next/router';
+import {type NextPage} from "next";
+import {trpc} from "@utils/trpc";
+
+
+const WorkflowsPage: NextPage = () => {
+  const { userInfo } = useLabelsContext();
+  const viewInfo = userInfo && getViewInfo({ userInfo });
+  const trpcUtils = trpc.useContext();
+  const isMobile = useIsMobile();
+  const router = useRouter();
+  
+  const workflowTypeString: string | string[] | undefined = (router.isReady) ? router.query.WorkflowType : undefined;
+  const workflowType: WorkflowType = retrieveWorkflowType({ workflowTypeObject: workflowTypeString });
+
+  const {
+    data,
+    refetch: refetchWorkflow,
+    error: fetchWorkflowError,
+    isRefetching: isRefetchingWorkflow,
+    isLoading: isLoadingWorkflow,
+  } = trpc.workflows.getWorkflow.useQuery({ entityId: viewInfo?.entityId ?? '', entityType: viewInfo?.entityType ?? EntityType.UserPersonal, type: workflowType }, {
+    enabled: (workflowType !== WorkflowType.Unknown && !!viewInfo?.entityId),
+    refetchInterval(query: GetWorkflowResponse | undefined) {
+      if (query && query.status === "success" && query.workflow && query.workflow.status === WorkflowStatus.Ongoing) {
+        return 7000;
+      }
+      return false;
+    },
+    retry: (failureCount: number) => {
+      return failureCount > 3 ? false : true;
+    },
+  });
+
+  const typesWithoutAssistant: WorkflowType[] = [
+    WorkflowType.Emailer,
+    WorkflowType.BatchEmails
+  ];
+
+  const showAssistant = (data && data.workflow && !typesWithoutAssistant.includes(data.workflow.workflowType)) ? true : false;
+
+  const updateWorkflow = (updatedWorkflow: WorkflowItem) => {
+    if (!trpcUtils.workflows.getWorkflow || !viewInfo?.entityId || !viewInfo?.entityType || !data) return;
+    
+    trpcUtils.workflows.getWorkflow.setData(
+      { status: "success", workflow: updatedWorkflow },
+      { entityId: viewInfo.entityId, entityType: viewInfo.entityType, type: workflowType }
+    );
+  }
+
+  if (!userInfo) {
+    return <></>;
+  } else if (workflowType === WorkflowType.Unknown) {
+    return (
+      <Flex direction="column" align="center" p="xl">
+        <Title align='center'>Unknown Workflow Type.</Title>
+        <Button mt={20} onClick={() => { router.push("/") }}>
+          Go Back Home
+        </Button>
+      </Flex>
+    );
+  }
+
+  return (
+    <Flex align="center" direction="column" h="calc(100svh - 100px)" sx={{ margin: 0, padding: 0, minHeight: 0 }}>
+      { showAssistant && (
+        <AssistantV2 isMobile={isMobile} mt={10} mb={0} centerText={true} textToShow={getDialog({ workflow: data?.workflow ?? null, workflowType })} wordDelay={300} />
+      )}
+      { isLoadingWorkflow && (
+        <Skeleton
+          visible={true}
+          mt={15}
+          h={"10rem"}
+          w={isMobile ? "90%" : "50%"}
+          style={{ boxShadow: "0px 5px 5px 1px #eeeeee5e" }}
+          radius="xl"
+        />
+      )}
+      { (!isLoadingWorkflow && data?.workflow) && (
+        <WorkflowCard workflow={data?.workflow} updateWorkflow={updateWorkflow} />
+      )}
+    </Flex>
+  );
+};
+
+const WorkflowCard = ({ workflow, updateWorkflow }: { workflow: WorkflowItem; updateWorkflow: (updatedWorkflow: WorkflowItem) => void }) => {
+  switch (workflow.workflowType) {
+    case WorkflowType.BatchEmails:
+      return (
+        <CleanEmailsWorkflowCard
+          workflow={workflow as BatchEmailsWorkflow}
+          updateWorkflow={updateWorkflow}
+        />
+      );
+    case WorkflowType.SyncContacts:
+      return (
+        <SyncContactsWorkflowCard
+          workflow={workflow as SyncContactsWorkflow}
+          updateWorkflow={updateWorkflow}
+        />);
+    case WorkflowType.SequenceContacts:
+      return (
+        <SequenceContactsWorkflowCard
+          workflow={workflow as SequenceContactsWorkflow}
+          updateWorkflow={updateWorkflow}
+        />);
+    default:
+      return <></>;
+  }
+}
+
+
+function getDialog({ workflow, workflowType }: { workflow: WorkflowItem | null; workflowType: WorkflowType }) {
+  const workflowName = getWorkflowTypeString({workflowType});
+  switch (workflow?.status) {
+    case WorkflowStatus.NotStarted:
+      return [`${workflowName} Workflow`];
+    case WorkflowStatus.Ongoing:
+      return [`Workflow in Progress. We will email you when finished.`];
+    case WorkflowStatus.Stopped:
+      return (!!workflow.stopReason) ? [`Error: ${workflow.stopReason}`] : ["Workflow Stopped"];
+    case WorkflowStatus.Completed:
+      return ["Workflow Completed. View results."];
+    case WorkflowStatus.Error:
+      return ["Workflow Error. Please try again."];
+    default:
+      return [`${workflowType} Workflow Runner`];
+  }
+}
+
+export default WorkflowsPage;

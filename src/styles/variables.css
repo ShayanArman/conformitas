@@ -1,0 +1,50 @@
+:root {
+    --orange-color: hsl(11, 100%, 60%);
+    --orange-assistant: hsla(11, 100%, 60%, 0.852);
+    --orange-light: hsla(11, 100%, 60%, 0.6);
+    --loader-color: #37B5FE;
+    --zero-gold: #DAA520;
+    --green-color: #0DA2C6;
+    --green-light: #0DA2C6a1;
+    --blue-color: #2196F3;
+    --blue-light: #2195f3a1;
+    --blue-lighter: rgba(33, 149, 243, 0.534);
+    --zero-blue: #47AFE6;
+    --zero-blue-hover: #47aee6d3;
+    --thaly-color: #37B5FE;
+    --campaigns-color: #2196F3;
+    --grey-color: grey;
+    --grey-light: #eee;
+    --grey-lighter: rgba(238, 238, 238, 0.621);
+    --shining-silver: rgba(192, 192, 192, 0.8);
+    --color-danger: #df1b41;
+    --thaly-gold: #DAA520;
+    /* thaly colors */
+    --link-color: #3DBCF8;
+    --link-color-transparent: #3dbdf858;
+    --mina-pink: #e64980;
+    /* folder colors */
+    --calendar-color: #0DA2C6d1;
+    --chats-color: pink;
+    --bookings-color: #2195f3d8;
+    --purchases-color: #74b757e8;
+    --newsletters-color: black;
+    --promotions-color: #ff5e6c;
+    --notifications-color: red;
+    --unsubscribe-color: red;
+    --archive-color: hsla(28, 100%, 60%, 0.838);
+    --zeroTrash-color: #bccbde;
+    --zeroInbox-color: #eee;
+    /* folder light */
+    --calendar-light: #0da1c677;
+    --chats-light: rgba(255, 192, 203, 0.47);
+    --bookings-light: #2195f362;
+    --purchases-light: #74b7576e;
+    --newsletters-light: rgba(0, 0, 0, 0.44);
+    --promotions-light: #ff5e6c68;
+    --unsubscribe-light: rgba(255, 0, 0, 0.458);
+    --notifications-light: rgba(255, 0, 0, 0.458);
+    --archive-light: hsla(28, 100%, 60%, 0.579);
+    --zeroTrash-light: #bccbde92;
+    --zeroInbox-light: #eeeeeeb4;
+}
