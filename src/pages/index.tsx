@@ -198,7 +198,7 @@ const HomePage: NextPage = () => {
       <Container size="lg" className={styles.pageContainer}>
         <Card withBorder radius="md" p="xl" className={styles.heroCard}>
           <Stack spacing="xs">
-            <Text className={styles.eyebrow}>EXA INTERVIEW DEMO</Text>
+            <Text className={styles.eyebrow}>EXA DEMO</Text>
             <Title order={1} className={styles.heroTitle}>
               Construction Compliance Finder
             </Title>
