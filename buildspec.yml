@@ -1,12 +1,10 @@
 version: 0.2
 env:
   secrets-manager:
-    DATABASE_URL: "${BUILD_ENV}/zerocore:DATABASE_URL"
     NODE_ENV:  "${BUILD_ENV}/zerocore:NODE_ENV"
     NEXTAUTH_SECRET:  "${BUILD_ENV}/zerocore:NEXTAUTH_SECRET"
     NEXTAUTH_URL: "${BUILD_ENV}/zerocore:NEXTAUTH_URL"
     OPENAI_API_KEY: "${BUILD_ENV}/zerocore:OPENAI_API_KEY"
-    HOST:  "${BUILD_ENV}/zerocore:HOST"
     GEMINI_API_KEY: "${BUILD_ENV}/zerocore:GEMINI_API_KEY"
 phases:
   install:
