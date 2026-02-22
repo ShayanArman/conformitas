@@ -1,5 +1,5 @@
 import {
-  ExaCompliance,
+  exaCompliance,
   type ComplianceSearchResult,
 } from "@server/services/exa/exa";
 
@@ -266,7 +266,7 @@ const CORE_TEMPLATE_KEYS = [
 
 export class ComplianceAgent {
   static async search(input: SearchInput) {
-    const search = await ExaCompliance.search({
+    const search = await exaCompliance.search({
       projectPrompt: input.projectPrompt,
       numResults: input.numResults ?? 8,
     });
@@ -291,7 +291,7 @@ export class ComplianceAgent {
   }
 
   static async answer(input: AnswerInput) {
-    const answer = await ExaCompliance.answer({
+    const answer = await exaCompliance.answer({
       question: input.question,
       jurisdictionHint: input.jurisdictionHint,
     });
@@ -304,7 +304,7 @@ export class ComplianceAgent {
   }
 
   static async similar(input: SimilarInput) {
-    const similar = await ExaCompliance.similar({
+    const similar = await exaCompliance.similar({
       seedUrl: input.seedUrl,
       numResults: input.numResults ?? 6,
     });

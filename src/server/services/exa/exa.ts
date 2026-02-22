@@ -13,6 +13,8 @@ const PREFERRED_COMPLIANCE_DOMAINS = [
 const COMPLIANCE_QUERY_HINT =
   "construction compliance regulations permits zoning building code occupancy fire safety";
 
+const DEFAULT_JURISDICTION_HINT = "Kitsilano, Vancouver, BC, Canada";
+
 type ExaRawResult = {
   title?: unknown;
   url?: unknown;
@@ -56,6 +58,13 @@ type SimilarResponse = {
 type AnswerRequest = {
   question: string;
   jurisdictionHint?: string;
+};
+
+type ExaComplianceConfig = {
+  clientFactory?: () => Exa;
+  preferredDomains?: string[];
+  queryHint?: string;
+  defaultJurisdictionHint?: string;
 };
 
 export type ComplianceAnswerCitation = {
@@ -108,8 +117,30 @@ const COMPLIANCE_ANSWER_OUTPUT_SCHEMA = {
   },
 } as const;
 
+function createDefaultExaClient(): Exa {
+  const apiKey = env.EXA_API_KEY;
+  if (!apiKey) {
+    throw new Error("EXA_API_KEY is missing. Add it to your environment.");
+  }
+
+  return new Exa(apiKey);
+}
+
 export class ExaCompliance {
-  static async search(request: SearchRequest): Promise<SearchResponse> {
+  private readonly clientFactory: () => Exa;
+  private readonly preferredDomains: string[];
+  private readonly queryHint: string;
+  private readonly defaultJurisdictionHint: string;
+
+  constructor(config: ExaComplianceConfig = {}) {
+    this.clientFactory = config.clientFactory ?? createDefaultExaClient;
+    this.preferredDomains = config.preferredDomains ?? PREFERRED_COMPLIANCE_DOMAINS;
+    this.queryHint = config.queryHint ?? COMPLIANCE_QUERY_HINT;
+    this.defaultJurisdictionHint =
+      config.defaultJurisdictionHint ?? DEFAULT_JURISDICTION_HINT;
+  }
+
+  async search(request: SearchRequest): Promise<SearchResponse> {
     const exa = this.client();
     const queryUsed = this.buildSearchQuery(request.projectPrompt);
 
@@ -119,7 +150,7 @@ export class ExaCompliance {
           exa.search(queryUsed, {
             numResults: request.numResults,
             type: "auto",
-            includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+            includeDomains: this.preferredDomains,
             contents: {
               text: {
                 maxCharacters: 10000,
@@ -130,7 +161,7 @@ export class ExaCompliance {
           exa.search(queryUsed, {
             numResults: request.numResults,
             type: "auto",
-            includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+            includeDomains: this.preferredDomains,
             contents: {
               text: true,
             },
@@ -139,7 +170,7 @@ export class ExaCompliance {
           exa.search(queryUsed, {
             numResults: request.numResults,
             type: "auto",
-            includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+            includeDomains: this.preferredDomains,
           }),
       ],
       "Unable to search compliance sources with Exa.",
@@ -147,12 +178,12 @@ export class ExaCompliance {
 
     return {
       queryUsed,
-      searchedDomains: PREFERRED_COMPLIANCE_DOMAINS,
+      searchedDomains: this.preferredDomains,
       results: this.normalizeResults(this.extractResults(response, "search")),
     };
   }
 
-  static async answer(request: AnswerRequest): Promise<AnswerResponse> {
+  async answer(request: AnswerRequest): Promise<AnswerResponse> {
     const exa = this.client();
     const query = this.buildAnswerQuery({
       question: request.question,
@@ -180,7 +211,7 @@ export class ExaCompliance {
     };
   }
 
-  static async similar(request: SimilarRequest): Promise<SimilarResponse> {
+  async similar(request: SimilarRequest): Promise<SimilarResponse> {
     const exa = this.client();
 
     const response = await this.withAttempts(
@@ -188,7 +219,7 @@ export class ExaCompliance {
         () =>
           exa.findSimilar(request.seedUrl, {
             numResults: request.numResults,
-            includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+            includeDomains: this.preferredDomains,
             contents: {
               text: {
                 maxCharacters: 10000,
@@ -198,7 +229,7 @@ export class ExaCompliance {
         () =>
           exa.findSimilar(request.seedUrl, {
             numResults: request.numResults,
-            includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+            includeDomains: this.preferredDomains,
             contents: {
               text: true,
             },
@@ -206,7 +237,7 @@ export class ExaCompliance {
         () =>
           exa.findSimilar(request.seedUrl, {
             numResults: request.numResults,
-            includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+            includeDomains: this.preferredDomains,
           }),
       ],
       "Unable to find similar compliance sources with Exa.",
@@ -214,21 +245,16 @@ export class ExaCompliance {
 
     return {
       seedUrl: request.seedUrl,
-      searchedDomains: PREFERRED_COMPLIANCE_DOMAINS,
+      searchedDomains: this.preferredDomains,
       results: this.normalizeResults(this.extractResults(response, "findSimilar")),
     };
   }
 
-  private static client(): Exa {
-    const apiKey = env.EXA_API_KEY;
-    if (!apiKey) {
-      throw new Error("EXA_API_KEY is missing. Add it to your environment.");
-    }
-
-    return new Exa(apiKey);
+  private client(): Exa {
+    return this.clientFactory();
   }
 
-  private static async withAttempts(
+  private async withAttempts(
     attempts: Array<() => Promise<unknown>>,
     fallbackMessage: string,
   ): Promise<unknown> {
@@ -245,7 +271,7 @@ export class ExaCompliance {
     throw lastError ?? new Error(fallbackMessage);
   }
 
-  private static normalizeExaError(error: unknown, fallbackMessage: string): Error {
+  private normalizeExaError(error: unknown, fallbackMessage: string): Error {
     if (error instanceof SyntaxError) {
       const message = error.message.toLowerCase();
       if (
@@ -262,19 +288,18 @@ export class ExaCompliance {
     return error instanceof Error ? error : new Error(fallbackMessage);
   }
 
-  private static buildSearchQuery(projectPrompt: string): string {
-    return [COMPLIANCE_QUERY_HINT, projectPrompt].join(" ");
+  private buildSearchQuery(projectPrompt: string): string {
+    return [this.queryHint, projectPrompt].join(" ");
   }
 
-  private static buildAnswerQuery({
+  private buildAnswerQuery({
     question,
     jurisdictionHint,
   }: {
     question: string;
     jurisdictionHint?: string;
   }): string {
-    const defaultHint = "Kitsilano, Vancouver, BC, Canada";
-    const jurisdiction = jurisdictionHint?.trim() || defaultHint;
+    const jurisdiction = jurisdictionHint?.trim() || this.defaultJurisdictionHint;
 
     return [
       `Jurisdiction: ${jurisdiction}.`,
@@ -284,7 +309,7 @@ export class ExaCompliance {
     ].join(" ");
   }
 
-  private static extractResults(response: unknown, apiName: string): ExaRawResult[] {
+  private extractResults(response: unknown, apiName: string): ExaRawResult[] {
     const results = this.asRecord(response)?.results;
     if (!Array.isArray(results)) {
       throw new Error(`Unexpected Exa ${apiName} response format.`);
@@ -293,7 +318,7 @@ export class ExaCompliance {
     return results.filter((result): result is ExaRawResult => this.isRecord(result));
   }
 
-  private static normalizeResults(rawResults: ExaRawResult[]): ComplianceSearchResult[] {
+  private normalizeResults(rawResults: ExaRawResult[]): ComplianceSearchResult[] {
     const uniqueUrls = new Set<string>();
     const normalized: ComplianceSearchResult[] = [];
 
@@ -329,7 +354,7 @@ export class ExaCompliance {
     return normalized;
   }
 
-  private static normalizeAnswer(answer: unknown): StructuredComplianceAnswer {
+  private normalizeAnswer(answer: unknown): StructuredComplianceAnswer {
     const fallback: StructuredComplianceAnswer = {
       conciseAnswer:
         "I could not structure a full answer from Exa for this question. Please rephrase and retry.",
@@ -369,7 +394,7 @@ export class ExaCompliance {
     };
   }
 
-  private static normalizeCitations(citations: unknown): ComplianceAnswerCitation[] {
+  private normalizeCitations(citations: unknown): ComplianceAnswerCitation[] {
     if (!Array.isArray(citations)) return [];
 
     const parsed: ComplianceAnswerCitation[] = [];
@@ -396,7 +421,7 @@ export class ExaCompliance {
     return parsed;
   }
 
-  private static makeSnippet(result: ExaRawResult): string {
+  private makeSnippet(result: ExaRawResult): string {
     const highlights = this.getHighlights(result.highlights);
     if (highlights.length > 0) return highlights.join(" ");
 
@@ -409,7 +434,7 @@ export class ExaCompliance {
     return "Open source for compliance details.";
   }
 
-  private static getHighlights(highlights: unknown): string[] {
+  private getHighlights(highlights: unknown): string[] {
     if (!highlights) return [];
 
     if (Array.isArray(highlights)) {
@@ -447,7 +472,7 @@ export class ExaCompliance {
     return [];
   }
 
-  private static getDomain(url: string): string {
+  private getDomain(url: string): string {
     try {
       return new URL(url).hostname;
     } catch {
@@ -455,11 +480,11 @@ export class ExaCompliance {
     }
   }
 
-  private static text(value: unknown): string {
+  private text(value: unknown): string {
     return typeof value === "string" ? value.trim() : "";
   }
 
-  private static textList(value: unknown): string[] {
+  private textList(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
 
     const normalized = value
@@ -470,11 +495,13 @@ export class ExaCompliance {
     return Array.from(new Set(normalized));
   }
 
-  private static asRecord(value: unknown): Record<string, unknown> | null {
+  private asRecord(value: unknown): Record<string, unknown> | null {
     return this.isRecord(value) ? value : null;
   }
 
-  private static isRecord(value: unknown): value is Record<string, unknown> {
+  private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
   }
 }
+
+export const exaCompliance = new ExaCompliance();
