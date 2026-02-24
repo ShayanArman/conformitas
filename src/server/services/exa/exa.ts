@@ -15,6 +15,7 @@ const COMPLIANCE_QUERY_HINT =
 
 const DEFAULT_JURISDICTION_HINT = "Kitsilano, Vancouver, BC, Canada";
 const MAX_RESULT_TEXT_CHARACTERS = 10_000;
+let exaClient: Exa | null = null;
 
 type ExaRawResult = {
   title?: unknown;
@@ -113,7 +114,7 @@ const COMPLIANCE_ANSWER_OUTPUT_SCHEMA = {
 
 export class ExaCompliance {
   public async search(request: SearchRequest): Promise<SearchResponse> {
-    const exa = createExaClient();
+    const exa = getExaClient();
     const queryUsed = buildSearchQuery(request.projectPrompt);
 
     const response = await withAttempts(
@@ -133,7 +134,7 @@ export class ExaCompliance {
   }
 
   public async answer(request: AnswerRequest): Promise<AnswerResponse> {
-    const exa = createExaClient();
+    const exa = getExaClient();
     const query = buildAnswerQuery(request);
 
     let response: unknown;
@@ -159,7 +160,7 @@ export class ExaCompliance {
   }
 
   public async similar(request: SimilarRequest): Promise<SimilarResponse> {
-    const exa = createExaClient();
+    const exa = getExaClient();
 
     const response = await withAttempts(
       buildSimilarAttempts({
@@ -178,13 +179,16 @@ export class ExaCompliance {
   }
 }
 
-function createExaClient(): Exa {
+function getExaClient(): Exa {
+  if (exaClient) return exaClient;
+
   const apiKey = env.EXA_API_KEY;
   if (!apiKey) {
     throw new Error("EXA_API_KEY is missing. Add it to your environment.");
   }
 
-  return new Exa(apiKey);
+  exaClient = new Exa(apiKey);
+  return exaClient;
 }
 
 function buildSearchAttempts({
