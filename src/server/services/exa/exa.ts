@@ -14,6 +14,7 @@ const COMPLIANCE_QUERY_HINT =
   "construction compliance regulations permits zoning building code occupancy fire safety";
 
 const DEFAULT_JURISDICTION_HINT = "Kitsilano, Vancouver, BC, Canada";
+const MAX_RESULT_TEXT_CHARACTERS = 10_000;
 
 type ExaRawResult = {
   title?: unknown;
@@ -58,13 +59,6 @@ type SimilarResponse = {
 type AnswerRequest = {
   question: string;
   jurisdictionHint?: string;
-};
-
-type ExaComplianceConfig = {
-  clientFactory?: () => Exa;
-  preferredDomains?: string[];
-  queryHint?: string;
-  defaultJurisdictionHint?: string;
 };
 
 export type ComplianceAnswerCitation = {
@@ -117,78 +111,30 @@ const COMPLIANCE_ANSWER_OUTPUT_SCHEMA = {
   },
 } as const;
 
-function createDefaultExaClient(): Exa {
-  const apiKey = env.EXA_API_KEY;
-  if (!apiKey) {
-    throw new Error("EXA_API_KEY is missing. Add it to your environment.");
-  }
-
-  return new Exa(apiKey);
-}
-
 export class ExaCompliance {
-  private readonly clientFactory: () => Exa;
-  private readonly preferredDomains: string[];
-  private readonly queryHint: string;
-  private readonly defaultJurisdictionHint: string;
+  public async search(request: SearchRequest): Promise<SearchResponse> {
+    const exa = createExaClient();
+    const queryUsed = buildSearchQuery(request.projectPrompt);
 
-  constructor(config: ExaComplianceConfig = {}) {
-    this.clientFactory = config.clientFactory ?? createDefaultExaClient;
-    this.preferredDomains = config.preferredDomains ?? PREFERRED_COMPLIANCE_DOMAINS;
-    this.queryHint = config.queryHint ?? COMPLIANCE_QUERY_HINT;
-    this.defaultJurisdictionHint =
-      config.defaultJurisdictionHint ?? DEFAULT_JURISDICTION_HINT;
-  }
-
-  async search(request: SearchRequest): Promise<SearchResponse> {
-    const exa = this.client();
-    const queryUsed = this.buildSearchQuery(request.projectPrompt);
-
-    const response = await this.withAttempts(
-      [
-        () =>
-          exa.search(queryUsed, {
-            numResults: request.numResults,
-            type: "auto",
-            includeDomains: this.preferredDomains,
-            contents: {
-              text: {
-                maxCharacters: 10000,
-              },
-            },
-          }),
-        () =>
-          exa.search(queryUsed, {
-            numResults: request.numResults,
-            type: "auto",
-            includeDomains: this.preferredDomains,
-            contents: {
-              text: true,
-            },
-          }),
-        () =>
-          exa.search(queryUsed, {
-            numResults: request.numResults,
-            type: "auto",
-            includeDomains: this.preferredDomains,
-          }),
-      ],
+    const response = await withAttempts(
+      buildSearchAttempts({
+        exa,
+        query: queryUsed,
+        numResults: request.numResults,
+      }),
       "Unable to search compliance sources with Exa.",
     );
 
     return {
       queryUsed,
-      searchedDomains: this.preferredDomains,
-      results: this.normalizeResults(this.extractResults(response, "search")),
+      searchedDomains: [...PREFERRED_COMPLIANCE_DOMAINS],
+      results: normalizeResults(extractResults(response, "search")),
     };
   }
 
-  async answer(request: AnswerRequest): Promise<AnswerResponse> {
-    const exa = this.client();
-    const query = this.buildAnswerQuery({
-      question: request.question,
-      jurisdictionHint: request.jurisdictionHint,
-    });
+  public async answer(request: AnswerRequest): Promise<AnswerResponse> {
+    const exa = createExaClient();
+    const query = buildAnswerQuery(request);
 
     let response: unknown;
     try {
@@ -197,311 +143,363 @@ export class ExaCompliance {
         outputSchema: COMPLIANCE_ANSWER_OUTPUT_SCHEMA,
       });
     } catch (error) {
-      throw this.normalizeExaError(error, "Unable to answer compliance question with Exa.");
+      throw normalizeExaError(
+        error,
+        "Unable to answer compliance question with Exa.",
+      );
     }
 
-    const record = this.asRecord(response);
-    const answer = this.normalizeAnswer(record?.answer ?? response);
-    const citations = this.normalizeCitations(record?.citations);
+    const record = asRecord(response);
 
     return {
       question: request.question,
-      answer,
-      citations,
+      answer: normalizeAnswer(record?.answer ?? response),
+      citations: normalizeCitations(record?.citations),
     };
   }
 
-  async similar(request: SimilarRequest): Promise<SimilarResponse> {
-    const exa = this.client();
+  public async similar(request: SimilarRequest): Promise<SimilarResponse> {
+    const exa = createExaClient();
 
-    const response = await this.withAttempts(
-      [
-        () =>
-          exa.findSimilar(request.seedUrl, {
-            numResults: request.numResults,
-            includeDomains: this.preferredDomains,
-            contents: {
-              text: {
-                maxCharacters: 10000,
-              },
-            },
-          }),
-        () =>
-          exa.findSimilar(request.seedUrl, {
-            numResults: request.numResults,
-            includeDomains: this.preferredDomains,
-            contents: {
-              text: true,
-            },
-          }),
-        () =>
-          exa.findSimilar(request.seedUrl, {
-            numResults: request.numResults,
-            includeDomains: this.preferredDomains,
-          }),
-      ],
+    const response = await withAttempts(
+      buildSimilarAttempts({
+        exa,
+        seedUrl: request.seedUrl,
+        numResults: request.numResults,
+      }),
       "Unable to find similar compliance sources with Exa.",
     );
 
     return {
       seedUrl: request.seedUrl,
-      searchedDomains: this.preferredDomains,
-      results: this.normalizeResults(this.extractResults(response, "findSimilar")),
+      searchedDomains: [...PREFERRED_COMPLIANCE_DOMAINS],
+      results: normalizeResults(extractResults(response, "findSimilar")),
     };
   }
+}
 
-  private client(): Exa {
-    return this.clientFactory();
+function createExaClient(): Exa {
+  const apiKey = env.EXA_API_KEY;
+  if (!apiKey) {
+    throw new Error("EXA_API_KEY is missing. Add it to your environment.");
   }
 
-  private async withAttempts(
-    attempts: Array<() => Promise<unknown>>,
-    fallbackMessage: string,
-  ): Promise<unknown> {
-    let lastError: Error | undefined;
+  return new Exa(apiKey);
+}
 
-    for (const run of attempts) {
-      try {
-        return await run();
-      } catch (error) {
-        lastError = this.normalizeExaError(error, fallbackMessage);
-      }
-    }
+function buildSearchAttempts({
+  exa,
+  query,
+  numResults,
+}: {
+  exa: Exa;
+  query: string;
+  numResults: number;
+}): Array<() => Promise<unknown>> {
+  return [
+    () =>
+      exa.search(query, {
+        numResults,
+        type: "auto",
+        includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+        contents: {
+          text: {
+            maxCharacters: MAX_RESULT_TEXT_CHARACTERS,
+          },
+        },
+      }),
+    () =>
+      exa.search(query, {
+        numResults,
+        type: "auto",
+        includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+        contents: {
+          text: true,
+        },
+      }),
+    () =>
+      exa.search(query, {
+        numResults,
+        type: "auto",
+        includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+      }),
+  ];
+}
 
-    throw lastError ?? new Error(fallbackMessage);
-  }
+function buildSimilarAttempts({
+  exa,
+  seedUrl,
+  numResults,
+}: {
+  exa: Exa;
+  seedUrl: string;
+  numResults: number;
+}): Array<() => Promise<unknown>> {
+  return [
+    () =>
+      exa.findSimilar(seedUrl, {
+        numResults,
+        includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+        contents: {
+          text: {
+            maxCharacters: MAX_RESULT_TEXT_CHARACTERS,
+          },
+        },
+      }),
+    () =>
+      exa.findSimilar(seedUrl, {
+        numResults,
+        includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+        contents: {
+          text: true,
+        },
+      }),
+    () =>
+      exa.findSimilar(seedUrl, {
+        numResults,
+        includeDomains: PREFERRED_COMPLIANCE_DOMAINS,
+      }),
+  ];
+}
 
-  private normalizeExaError(error: unknown, fallbackMessage: string): Error {
-    if (error instanceof SyntaxError) {
-      const message = error.message.toLowerCase();
-      if (
-        message.includes("unicode escape") ||
-        message.includes("unterminated string") ||
-        message.includes("unexpected token")
-      ) {
-        return new Error(
-          "Exa returned an unreadable response. Re-check EXA_API_KEY and retry.",
-        );
-      }
-    }
+async function withAttempts(
+  attempts: Array<() => Promise<unknown>>,
+  fallbackMessage: string,
+): Promise<unknown> {
+  let lastError: Error | undefined;
 
-    return error instanceof Error ? error : new Error(fallbackMessage);
-  }
-
-  private buildSearchQuery(projectPrompt: string): string {
-    return [this.queryHint, projectPrompt].join(" ");
-  }
-
-  private buildAnswerQuery({
-    question,
-    jurisdictionHint,
-  }: {
-    question: string;
-    jurisdictionHint?: string;
-  }): string {
-    const jurisdiction = jurisdictionHint?.trim() || this.defaultJurisdictionHint;
-
-    return [
-      `Jurisdiction: ${jurisdiction}.`,
-      "Answer as a construction compliance analyst.",
-      "Prioritize zoning, permits, building code, fire/life safety, and occupancy requirements.",
-      question.trim(),
-    ].join(" ");
-  }
-
-  private extractResults(response: unknown, apiName: string): ExaRawResult[] {
-    const results = this.asRecord(response)?.results;
-    if (!Array.isArray(results)) {
-      throw new Error(`Unexpected Exa ${apiName} response format.`);
-    }
-
-    return results.filter((result): result is ExaRawResult => this.isRecord(result));
-  }
-
-  private normalizeResults(rawResults: ExaRawResult[]): ComplianceSearchResult[] {
-    const uniqueUrls = new Set<string>();
-    const normalized: ComplianceSearchResult[] = [];
-
-    for (const result of rawResults) {
-      const url = typeof result.url === "string" ? result.url : "";
-      if (!url.startsWith("http") || uniqueUrls.has(url)) continue;
-
-      uniqueUrls.add(url);
-
-      const title =
-        typeof result.title === "string" && result.title.trim().length > 0
-          ? result.title.trim()
-          : "Untitled source";
-
-      const score =
-        typeof result.score === "number" && Number.isFinite(result.score)
-          ? result.score
-          : undefined;
-
-      const publishedDate =
-        typeof result.publishedDate === "string" ? result.publishedDate : undefined;
-
-      normalized.push({
-        title,
-        url,
-        snippet: this.makeSnippet(result),
-        domain: this.getDomain(url),
-        score,
-        publishedDate,
-      });
-    }
-
-    return normalized;
-  }
-
-  private normalizeAnswer(answer: unknown): StructuredComplianceAnswer {
-    const fallback: StructuredComplianceAnswer = {
-      conciseAnswer:
-        "I could not structure a full answer from Exa for this question. Please rephrase and retry.",
-      likelyPermits: ["Building permit", "Development/zoning review"],
-      governingBodies: ["Municipality", "Provincial code authority"],
-      criticalRisks: [
-        "Zoning mismatch",
-        "Fire/life-safety noncompliance",
-        "Permit sequencing delays",
-      ],
-      nextStep: "Confirm lot zoning and request a pre-application review with the municipality.",
-    };
-
-    if (typeof answer === "string") {
-      return {
-        ...fallback,
-        conciseAnswer: answer.trim() || fallback.conciseAnswer,
-      };
-    }
-
-    if (!this.isRecord(answer)) {
-      return fallback;
-    }
-
-    const conciseAnswer = this.text(answer.conciseAnswer) || fallback.conciseAnswer;
-    const likelyPermits = this.textList(answer.likelyPermits);
-    const governingBodies = this.textList(answer.governingBodies);
-    const criticalRisks = this.textList(answer.criticalRisks);
-    const nextStep = this.text(answer.nextStep) || fallback.nextStep;
-
-    return {
-      conciseAnswer,
-      likelyPermits: likelyPermits.length > 0 ? likelyPermits : fallback.likelyPermits,
-      governingBodies: governingBodies.length > 0 ? governingBodies : fallback.governingBodies,
-      criticalRisks: criticalRisks.length > 0 ? criticalRisks : fallback.criticalRisks,
-      nextStep,
-    };
-  }
-
-  private normalizeCitations(citations: unknown): ComplianceAnswerCitation[] {
-    if (!Array.isArray(citations)) return [];
-
-    const parsed: ComplianceAnswerCitation[] = [];
-    const seenUrls = new Set<string>();
-
-    for (const citation of citations) {
-      if (!this.isRecord(citation)) continue;
-
-      const url = this.text(citation.url) || this.text(citation.id);
-      if (!url || !url.startsWith("http") || seenUrls.has(url)) continue;
-
-      seenUrls.add(url);
-
-      parsed.push({
-        title: this.text(citation.title) || "Untitled citation",
-        url,
-        domain: this.getDomain(url),
-        publishedDate: this.text(citation.publishedDate) || undefined,
-        textSnippet:
-          this.text(citation.text)?.slice(0, 280) || "Open citation source for details.",
-      });
-    }
-
-    return parsed;
-  }
-
-  private makeSnippet(result: ExaRawResult): string {
-    const highlights = this.getHighlights(result.highlights);
-    if (highlights.length > 0) return highlights.join(" ");
-
-    const text = typeof result.text === "string" ? result.text : "";
-    const trimmedText = text.replace(/\s+/g, " ").trim();
-    if (trimmedText.length > 0) {
-      return trimmedText.length > 280 ? `${trimmedText.slice(0, 280)}...` : trimmedText;
-    }
-
-    return "Open source for compliance details.";
-  }
-
-  private getHighlights(highlights: unknown): string[] {
-    if (!highlights) return [];
-
-    if (Array.isArray(highlights)) {
-      return highlights
-        .flatMap((item) => {
-          if (typeof item === "string") return [item];
-          if (
-            this.isRecord(item) &&
-            typeof item.highlight === "string"
-          ) {
-            return [item.highlight];
-          }
-          return [];
-        })
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-
-    if (this.isRecord(highlights)) {
-      const values = Object.values(highlights);
-      return values
-        .flatMap((value) => {
-          if (typeof value === "string") return [value];
-          if (Array.isArray(value)) {
-            return value
-              .filter((item): item is string => typeof item === "string")
-              .map((item) => item.trim());
-          }
-          return [];
-        })
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-
-    return [];
-  }
-
-  private getDomain(url: string): string {
+  for (const attempt of attempts) {
     try {
-      return new URL(url).hostname;
-    } catch {
-      return "unknown";
+      return await attempt();
+    } catch (error) {
+      lastError = normalizeExaError(error, fallbackMessage);
     }
   }
 
-  private text(value: unknown): string {
-    return typeof value === "string" ? value.trim() : "";
+  throw lastError ?? new Error(fallbackMessage);
+}
+
+function normalizeExaError(error: unknown, fallbackMessage: string): Error {
+  if (error instanceof SyntaxError) {
+    const message = error.message.toLowerCase();
+
+    if (
+      message.includes("unicode escape") ||
+      message.includes("unterminated string") ||
+      message.includes("unexpected token")
+    ) {
+      return new Error(
+        "Exa returned an unreadable response. Re-check EXA_API_KEY and retry.",
+      );
+    }
   }
 
-  private textList(value: unknown): string[] {
-    if (!Array.isArray(value)) return [];
+  return error instanceof Error ? error : new Error(fallbackMessage);
+}
 
-    const normalized = value
-      .filter((item): item is string => typeof item === "string")
+function buildSearchQuery(projectPrompt: string): string {
+  return [COMPLIANCE_QUERY_HINT, projectPrompt].join(" ");
+}
+
+function buildAnswerQuery({ question, jurisdictionHint }: AnswerRequest): string {
+  const jurisdiction = jurisdictionHint?.trim() || DEFAULT_JURISDICTION_HINT;
+
+  return [
+    `Jurisdiction: ${jurisdiction}.`,
+    "Answer as a construction compliance analyst.",
+    "Prioritize zoning, permits, building code, fire/life safety, and occupancy requirements.",
+    question.trim(),
+  ].join(" ");
+}
+
+function extractResults(response: unknown, apiName: string): ExaRawResult[] {
+  const results = asRecord(response)?.results;
+  if (!Array.isArray(results)) {
+    throw new Error(`Unexpected Exa ${apiName} response format.`);
+  }
+
+  return results.filter((result): result is ExaRawResult => isRecord(result));
+}
+
+function normalizeResults(rawResults: ExaRawResult[]): ComplianceSearchResult[] {
+  const uniqueUrls = new Set<string>();
+  const normalized: ComplianceSearchResult[] = [];
+
+  for (const result of rawResults) {
+    const url = typeof result.url === "string" ? result.url : "";
+    if (!url.startsWith("http") || uniqueUrls.has(url)) continue;
+
+    uniqueUrls.add(url);
+
+    const title =
+      typeof result.title === "string" && result.title.trim().length > 0
+        ? result.title.trim()
+        : "Untitled source";
+
+    const score =
+      typeof result.score === "number" && Number.isFinite(result.score)
+        ? result.score
+        : undefined;
+
+    const publishedDate =
+      typeof result.publishedDate === "string" ? result.publishedDate : undefined;
+
+    normalized.push({
+      title,
+      url,
+      snippet: makeSnippet(result),
+      domain: getDomain(url),
+      score,
+      publishedDate,
+    });
+  }
+
+  return normalized;
+}
+
+function normalizeAnswer(answer: unknown): StructuredComplianceAnswer {
+  const fallback: StructuredComplianceAnswer = {
+    conciseAnswer:
+      "I could not structure a full answer from Exa for this question. Please rephrase and retry.",
+    likelyPermits: ["Building permit", "Development/zoning review"],
+    governingBodies: ["Municipality", "Provincial code authority"],
+    criticalRisks: [
+      "Zoning mismatch",
+      "Fire/life-safety noncompliance",
+      "Permit sequencing delays",
+    ],
+    nextStep: "Confirm lot zoning and request a pre-application review with the municipality.",
+  };
+
+  if (typeof answer === "string") {
+    return {
+      ...fallback,
+      conciseAnswer: answer.trim() || fallback.conciseAnswer,
+    };
+  }
+
+  if (!isRecord(answer)) return fallback;
+
+  const conciseAnswer = toText(answer.conciseAnswer) || fallback.conciseAnswer;
+  const likelyPermits = toUniqueTextList(answer.likelyPermits);
+  const governingBodies = toUniqueTextList(answer.governingBodies);
+  const criticalRisks = toUniqueTextList(answer.criticalRisks);
+  const nextStep = toText(answer.nextStep) || fallback.nextStep;
+
+  return {
+    conciseAnswer,
+    likelyPermits: likelyPermits.length > 0 ? likelyPermits : fallback.likelyPermits,
+    governingBodies:
+      governingBodies.length > 0 ? governingBodies : fallback.governingBodies,
+    criticalRisks: criticalRisks.length > 0 ? criticalRisks : fallback.criticalRisks,
+    nextStep,
+  };
+}
+
+function normalizeCitations(citations: unknown): ComplianceAnswerCitation[] {
+  if (!Array.isArray(citations)) return [];
+
+  const parsed: ComplianceAnswerCitation[] = [];
+  const seenUrls = new Set<string>();
+
+  for (const citation of citations) {
+    if (!isRecord(citation)) continue;
+
+    const url = toText(citation.url) || toText(citation.id);
+    if (!url || !url.startsWith("http") || seenUrls.has(url)) continue;
+
+    seenUrls.add(url);
+
+    parsed.push({
+      title: toText(citation.title) || "Untitled citation",
+      url,
+      domain: getDomain(url),
+      publishedDate: toText(citation.publishedDate) || undefined,
+      textSnippet:
+        toText(citation.text).slice(0, 280) || "Open citation source for details.",
+    });
+  }
+
+  return parsed;
+}
+
+function makeSnippet(result: ExaRawResult): string {
+  const highlights = getHighlights(result.highlights);
+  if (highlights.length > 0) return highlights.join(" ");
+
+  const text = typeof result.text === "string" ? result.text : "";
+  const trimmedText = text.replace(/\s+/g, " ").trim();
+
+  if (trimmedText.length > 0) {
+    return trimmedText.length > 280 ? `${trimmedText.slice(0, 280)}...` : trimmedText;
+  }
+
+  return "Open source for compliance details.";
+}
+
+function getHighlights(highlights: unknown): string[] {
+  if (!highlights) return [];
+
+  if (Array.isArray(highlights)) {
+    return highlights
+      .flatMap((item) => {
+        if (typeof item === "string") return [item];
+        if (isRecord(item) && typeof item.highlight === "string") {
+          return [item.highlight];
+        }
+        return [];
+      })
       .map((item) => item.trim())
       .filter(Boolean);
-
-    return Array.from(new Set(normalized));
   }
 
-  private asRecord(value: unknown): Record<string, unknown> | null {
-    return this.isRecord(value) ? value : null;
+  if (isRecord(highlights)) {
+    return Object.values(highlights)
+      .flatMap((value) => {
+        if (typeof value === "string") return [value];
+        if (Array.isArray(value)) {
+          return value
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim());
+        }
+        return [];
+      })
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
 
-  private isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null;
+  return [];
+}
+
+function getDomain(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "unknown";
   }
+}
+
+function toText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function toUniqueTextList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(normalized));
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export const exaCompliance = new ExaCompliance();
